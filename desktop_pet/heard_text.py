@@ -101,7 +101,7 @@ class HeardText(QWidget):
             by_clamped = min(by, geom.bottom() - self.height())
             # If clamped position overlaps anchor, flip above the pony
             if by_clamped < anchor_y + 4:
-                by = w.y() - self.height() - 4
+                by = max(geom.top(), w.y() - self.height() - 4)
             else:
                 by = by_clamped
 

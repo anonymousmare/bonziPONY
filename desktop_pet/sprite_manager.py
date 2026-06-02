@@ -33,7 +33,9 @@ def _pil_to_qpixmap(pil_image: Image.Image, scale: float) -> QPixmap:
     if scale != 1.0:
         new_w = int(pixmap.width() * scale)
         new_h = int(pixmap.height() * scale)
-        pixmap = pixmap.scaled(new_w, new_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # Nearest-neighbor: Desktop Ponies sprites are pixel art, bilinear
+        # smoothing turns them into muddy gradients at 2x+.
+        pixmap = pixmap.scaled(new_w, new_h, Qt.KeepAspectRatio, Qt.FastTransformation)
     return pixmap
 
 

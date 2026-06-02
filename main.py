@@ -118,10 +118,25 @@ def main() -> None:
     scan_ponies(ponies_root)
 
     # ── Apply preset ───────────────────────────────────────────────────────────
-    from llm.prompt import set_preset, set_relationship
+    from llm.prompt import set_preset, set_relationship, set_safety_config
     set_preset(config.llm.preset)
     set_relationship(config.llm.relationship, config.llm.relationship_custom)
+    set_safety_config(config.safety)
     logger.info("Loaded preset: %s", config.llm.preset)
+
+    # ── Sync auto-update marker file ───────────────────────────────────────
+    # retardsetup.bat reads this marker (not YAML) to decide whether to
+    # `git pull` on launch. Default is OFF: marker absent → batch skips update.
+    try:
+        _au_marker = Path(".autoupdate_enabled")
+        if getattr(config, "auto_update", False):
+            if not _au_marker.exists():
+                _au_marker.write_text("1", encoding="utf-8")
+        else:
+            if _au_marker.exists():
+                _au_marker.unlink()
+    except Exception as _exc:
+        logger.debug("auto_update marker sync failed: %s", _exc)
 
     # ── Build pipeline components ─────────────────────────────────────────────
     from wake_word.detector import WakeWordDetector, get_phrases_for
@@ -194,7 +209,18 @@ def main() -> None:
             vision_llm = None
 
     # ── TTS provider selection ─────────────────────────────────────────────
-    if config.tts.provider == "openai_compatible":
+    # Read-only mode: force openai_compatible. ElevenLabs is a cloud provider
+    # that ships speech audio off-device, so we refuse it when safety is on.
+    _tts_provider = config.tts.provider
+    if getattr(config.safety, "read_only_mode", False) and _tts_provider != "openai_compatible":
+        logger.warning(
+            "Read-only mode: forcing TTS to openai_compatible (was %s). "
+            "Disable Read-Only in the right-click menu to use %s again.",
+            _tts_provider, _tts_provider,
+        )
+        _tts_provider = "openai_compatible"
+
+    if _tts_provider == "openai_compatible":
         from tts.openai_compatible_tts import OpenAICompatibleTTS
         tts = OpenAICompatibleTTS(
             base_url=config.tts.base_url,
@@ -274,6 +300,29 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
+    # ── Single-instance guard ─────────────────────────────────────────────
+    # Prevents the "two dashies after restart" bug where a prior instance
+    # survived the close and a fresh one is launched on top of it.
+    from PyQt5.QtCore import QSharedMemory
+    _single_instance = QSharedMemory("bonziPONY_SINGLETON_LOCK")
+    if not _single_instance.create(1):
+        # Another instance already holds the lock. Warn and bail so we
+        # don't end up with duplicate ponies on screen.
+        try:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                None, "bonziPONY already running",
+                "A previous bonziPONY instance is still alive.\n\n"
+                "Close it from the right-click menu (or kill python.exe "
+                "in Task Manager) before starting a new one.",
+            )
+        except Exception:
+            pass
+        logger.warning("Another bonziPONY instance detected — exiting to avoid duplicate ponies.")
+        sys.exit(0)
+    # Keep a strong ref so the segment isn't freed until process exit
+    globals()["_bonzipony_lock"] = _single_instance
+
     # Create the PetController (acts as both RobotController and Qt signal bridge)
     pet_controller = PetController()
 
@@ -352,6 +401,7 @@ def main() -> None:
             on_grab_cursor=None,  # wired after _on_grab_cursor is defined
             vision_llm=vision_llm,
             timeline=timeline,
+            safety_config=config.safety,
         )
 
     # ── Multi-pony: wrap primary as PonyInstance + create manager ──────────
@@ -644,6 +694,8 @@ def main() -> None:
     # Create speech bubble
     speech_bubble = SpeechBubble()
     speech_bubble.set_anchor_widget(pet_window)
+    speech_bubble.set_font_style(getattr(config.desktop_pet, "font_style", "default"))
+    speech_bubble.set_typewriter_sound(getattr(config.desktop_pet, "typewriter_sound", True))
 
     heard_text = HeardText()
     heard_text.set_anchor_widget(pet_window)

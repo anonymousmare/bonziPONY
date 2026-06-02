@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import random
 import re
+import threading
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from core.pony_manager import PonyManager
 
 logger = logging.getLogger(__name__)
+
 
 # Regex to strip pipeline tags the LLM may include — these should never be spoken aloud
 _TAG_RE = re.compile(
@@ -113,6 +115,7 @@ class GroupConversation:
     # Class-level recent topic tracking — shared across all conversations
     # to prevent the same topics coming up repeatedly.
     _recent_topics: List[str] = []
+    _recent_topics_lock = threading.Lock()
     _MAX_RECENT_TOPICS = 15
 
     def __init__(
@@ -131,18 +134,19 @@ class GroupConversation:
     @classmethod
     def _record_topic(cls, opening_line: str) -> None:
         """Record a conversation opening so we can warn against repetition."""
-        # Keep a short summary (first 80 chars)
         summary = opening_line[:80].strip()
-        cls._recent_topics.append(summary)
-        if len(cls._recent_topics) > cls._MAX_RECENT_TOPICS:
-            cls._recent_topics.pop(0)
+        with cls._recent_topics_lock:
+            cls._recent_topics.append(summary)
+            if len(cls._recent_topics) > cls._MAX_RECENT_TOPICS:
+                cls._recent_topics.pop(0)
 
     @classmethod
     def _get_recent_topics_warning(cls) -> str:
         """Build a warning string listing recent topics to avoid."""
-        if not cls._recent_topics:
-            return ""
-        recent = cls._recent_topics[-8:]  # last 8 conversation openers
+        with cls._recent_topics_lock:
+            if not cls._recent_topics:
+                return ""
+            recent = list(cls._recent_topics[-8:])
         lines = ", ".join(f'"{t}"' for t in recent)
         return (
             f"RECENT conversations already covered these topics (DO NOT repeat them, "
@@ -169,7 +173,7 @@ class GroupConversation:
         )
 
         try:
-            opening = initiator.llm.generate_once(prompt, max_tokens=150)
+            opening = initiator.llm.chat(prompt)
         except Exception as exc:
             logger.error("Themed conversation start failed: %s", exc)
             return
@@ -211,7 +215,7 @@ class GroupConversation:
         )
 
         try:
-            opening = initiator.llm.generate_once(prompt, max_tokens=150)
+            opening = initiator.llm.chat(prompt)
         except Exception as exc:
             logger.error("Group conversation start failed: %s", exc)
             return
@@ -254,7 +258,7 @@ class GroupConversation:
         )
 
         try:
-            reply = pony.llm.generate_once(prompt, max_tokens=100)
+            reply = pony.llm.chat(prompt)
         except Exception as exc:
             logger.debug("Piggyback LLM call failed: %s", exc)
             return
@@ -341,7 +345,7 @@ class GroupConversation:
         )
 
         try:
-            reply = pony.llm.generate_once(prompt, max_tokens=150)
+            reply = pony.llm.chat(prompt)
         except Exception as exc:
             logger.debug("Turn offer LLM call failed for %s: %s", pony.display_name, exc)
             return None

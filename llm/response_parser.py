@@ -5,11 +5,64 @@ Parses LLM responses to extract [ACTION:XYZ], [DESKTOP:cmd:args],
 
 from __future__ import annotations
 
+import logging
+import random
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 from robot.actions import RobotAction
+
+logger = logging.getLogger(__name__)
+
+# ── System-prompt leak detection ──────────────────────────────────────────────
+# When the LLM regurgitates its own preset / instructions back as a response,
+# we MUST NOT speak it through TTS. The user once heard the entire system
+# prompt read out loud. These signatures are phrases that appear in presets
+# or in `llm/prompt.py` and would NEVER appear in normal in-character speech.
+# Any hit means the response is corrupt and must be replaced.
+_PROMPT_LEAK_SIGNATURES: tuple[str, ...] = (
+    "being fed through a text-to-speech engine",
+    "everything you write will be spoken aloud",
+    "you are a tts voice",
+    "voice rules — read these first",
+    "anti-slop rules",
+    "absolute rules",
+    "output format",
+    "your #1 failure mode",
+    "stage directions",
+    "[directive:goal:urgency",
+    "[desktop:cmd:args",
+    "[action:walk_forward",
+    "system prompt",
+    "your character preset",
+    "do not write stage directions",
+    "you are being fed",
+    "you have access to the following desktop commands",
+    "first-person recap",
+    "your recent diary",
+)
+
+# Fallback in-character lines used when a leak is caught. Picked at random so
+# repeated leaks don't produce the same canned line over and over.
+_LEAK_FALLBACK_LINES: tuple[str, ...] = (
+    "uh. i lost my train of thought, sorry. what were we talking about?",
+    "wait, hold on, my brain just blanked. say that again?",
+    "hnnnh... okay i totally just spaced out. one sec.",
+    "ugh, sorry, brain hiccup. give me a second.",
+)
+
+
+def detect_prompt_leak(text: str) -> Optional[str]:
+    """Return the matched signature if *text* contains a system-prompt leak,
+    else None. Case-insensitive substring scan."""
+    if not text:
+        return None
+    lower = text.lower()
+    for sig in _PROMPT_LEAK_SIGNATURES:
+        if sig in lower:
+            return sig
+    return None
 
 # Matches [ACTION:WALK_FORWARD], [action:sit], etc.
 _ACTION_PATTERN = re.compile(r"\[ACTION:([A-Z_]+)\]", re.IGNORECASE)
@@ -50,8 +103,11 @@ _MOVETO_PATTERN = re.compile(r"\[MOVETO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 # Matches [RULE:quit porn] or [RULE:stop buying CS2 items] — create a standing rule
 _RULE_PATTERN = re.compile(r"\[RULE:([^\]]+)\]", re.IGNORECASE)
 
+# Matches [DIARY:today i flew higher than ever] — write a first-person diary entry
+_DIARY_PATTERN = re.compile(r"\[DIARY:([^\]]+)\]", re.IGNORECASE)
+
 # Catch-all: strip any remaining [TAG:...] bracket expressions the LLM may produce
-_LEFTOVER_TAG_PATTERN = re.compile(r"\[(?:MOVETO|PERSIST|ANIM|ACTION|CONVO|DESKTOP|DIRECTIVE|TIMER|ROUTINE|ENFORCE|DONE|DELAY|RULE)\s*:[^\]]*\]", re.IGNORECASE)
+_LEFTOVER_TAG_PATTERN = re.compile(r"\[(?:MOVETO|PERSIST|ANIM|ACTION|CONVO|DESKTOP|DIRECTIVE|TIMER|ROUTINE|ENFORCE|DONE|DELAY|RULE|DIARY)\s*:[^\]]*\]", re.IGNORECASE)
 
 # Strip <think>...</think> blocks from reasoning models (DeepSeek, QwQ, etc.)
 _THINK_BLOCK_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
@@ -130,6 +186,7 @@ class ParsedResponse:
     persist_seconds: Optional[int] = None  # keep action animation for N seconds
     moveto_region: Optional[str] = None    # move pony to screen region
     standing_rule: Optional[str] = None    # create a permanent standing rule
+    diary_entry: Optional[str] = None      # first-person journal text to append
 
 
 def parse_response(raw: str) -> ParsedResponse:
@@ -140,6 +197,22 @@ def parse_response(raw: str) -> ParsedResponse:
     if "<think>" in raw.lower() and "</think>" not in raw.lower():
         idx = raw.lower().rfind("<think>")
         raw = raw[:idx].strip()
+
+    # ── System-prompt leak guard ──
+    # If the model regurgitated its own preset/instructions as a response,
+    # refuse to parse OR speak it. Replace with a safe in-character line and
+    # discard ALL side-effects (desktop commands, directives, diary, etc.) —
+    # they cannot be trusted from a corrupted reply.
+    leak_sig = detect_prompt_leak(raw)
+    if leak_sig is not None:
+        logger.warning(
+            "Prompt leak detected (signature=%r) — refusing to TTS. "
+            "First 200 chars of leaked reply: %r",
+            leak_sig, raw[:200],
+        )
+        print(f"[LEAK GUARD] Refused to speak prompt-leaking reply "
+              f"(matched: {leak_sig!r})", flush=True)
+        return ParsedResponse(text=random.choice(_LEAK_FALLBACK_LINES))
 
     actions: List[RobotAction] = []
     desktop_commands: List[DesktopCommand] = []
@@ -357,6 +430,12 @@ def parse_response(raw: str) -> ParsedResponse:
     if rule_match:
         standing_rule = rule_match.group(1).strip()
 
+    # Parse [DIARY:text] tag — first-person journal entry
+    diary_entry = None
+    diary_match = _DIARY_PATTERN.search(raw)
+    if diary_match:
+        diary_entry = diary_match.group(1).strip()
+
     clean_text = _ACTION_PATTERN.sub("", raw)
     clean_text = _DESKTOP_PATTERN.sub("", clean_text)
     clean_text = _DESKTOP_TRUNCATED.sub("", clean_text)
@@ -370,6 +449,7 @@ def parse_response(raw: str) -> ParsedResponse:
     clean_text = _PERSIST_PATTERN.sub("", clean_text)
     clean_text = _MOVETO_PATTERN.sub("", clean_text)
     clean_text = _RULE_PATTERN.sub("", clean_text)
+    clean_text = _DIARY_PATTERN.sub("", clean_text)
     clean_text = _LEFTOVER_TAG_PATTERN.sub("", clean_text).strip()
     # Sanitize for TTS — strip code, markdown, HTML, URLs
     clean_text = sanitize_for_speech(clean_text)
@@ -379,7 +459,7 @@ def parse_response(raw: str) -> ParsedResponse:
                           delay_minutes=delay_minutes, delay_keyword=delay_keyword,
                           end_conversation=end_conversation,
                           persist_seconds=persist_seconds, moveto_region=moveto_region,
-                          standing_rule=standing_rule)
+                          standing_rule=standing_rule, diary_entry=diary_entry)
 
 
 def sanitize_for_speech(text: str) -> str:

@@ -13,7 +13,13 @@ cd /d "%~dp0"
 
 :: ══════════════════════════════════════════════════════════════
 ::  AUTO-UPDATE: Pull newest version if this is a git repo
+::  Disabled by default. Enable via the right-click menu in the
+::  pony, which creates the ".autoupdate_enabled" marker file.
 :: ══════════════════════════════════════════════════════════════
+if not exist ".autoupdate_enabled" (
+    echo  [OK] Auto-update is OFF. Toggle it in the pony's right-click menu.
+    goto :skip_update
+)
 git --version >nul 2>&1
 if errorlevel 1 goto :skip_update
 if not exist ".git" goto :skip_update

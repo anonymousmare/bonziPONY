@@ -169,6 +169,8 @@ class PonyInstance:
         pet_window = PetWindow(sprite_manager, behavior_manager, effect_renderer)
         speech_bubble = SpeechBubble()
         speech_bubble.set_anchor_widget(pet_window)
+        speech_bubble.set_font_style(getattr(config.desktop_pet, "font_style", "default"))
+        speech_bubble.set_typewriter_sound(getattr(config.desktop_pet, "typewriter_sound", True))
         heard_text = HeardText()
         heard_text.set_anchor_widget(pet_window)
 

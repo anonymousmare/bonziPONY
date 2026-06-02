@@ -155,6 +155,17 @@ class DesktopPetConfig:
     enabled: bool = True
     scale: float = 2.0
     speech_bubble: bool = True
+    font_style: str = "default"        # "default" (Segoe UI) | "m5x7" (pixel)
+    typewriter_sound: bool = True      # click-click while bubble types
+
+
+@dataclass
+class SafetyConfig:
+    """Read-only / safety controls. When read_only_mode is True, the agent
+    loop skips all invasive behaviors: AFK mischief, force-escalation
+    (LOCK_MOUSE/MESS_MOUSE/ALT_TAB), standing-rule window closing, desktop
+    command dispatch, updater, and cloud LLM/TTS providers."""
+    read_only_mode: bool = False
 
 
 @dataclass
@@ -185,6 +196,8 @@ class AppConfig:
     tts: TTSConfig = None
     vision_llm: VisionLLMConfig = None
     multi_pony: MultiPonyConfig = None
+    safety: SafetyConfig = None
+    auto_update: bool = False              # auto-pull git updates on launch (off by default)
     presentation_mode: bool = False        # secret: unlocks demo/presentation menu
 
     def __post_init__(self):
@@ -202,6 +215,8 @@ class AppConfig:
             self.vision_llm = VisionLLMConfig()
         if self.multi_pony is None:
             self.multi_pony = MultiPonyConfig()
+        if self.safety is None:
+            self.safety = SafetyConfig()
 
 
 def _parse_vision_llm(raw: dict | None) -> VisionLLMConfig | None:
@@ -257,6 +272,8 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
     tts_raw = raw.get("tts", {})
     vlm_raw = raw.get("vision_llm", {})
     mp_raw = raw.get("multi_pony", {})
+    safety_raw = raw.get("safety", {})
+    auto_update = bool(raw.get("auto_update", False))
     presentation_mode = raw.get("presentation_mode", False)
 
     # ── Env var fallbacks for secrets (config.yaml wins, env is backup) ─────
@@ -328,6 +345,8 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             enabled=pet_raw.get("enabled", True),
             scale=pet_raw.get("scale", 2.0),
             speech_bubble=pet_raw.get("speech_bubble", True),
+            font_style=pet_raw.get("font_style", "default"),
+            typewriter_sound=pet_raw.get("typewriter_sound", True),
         ),
         desktop_control=DesktopControlConfig(
             enabled=dc_raw.get("enabled", True),
@@ -377,5 +396,9 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             piggyback_chance=mp_raw.get("piggyback_chance", 0.30),
             secondary_ponies=mp_raw.get("secondary_ponies", []),
         ),
+        safety=SafetyConfig(
+            read_only_mode=bool(safety_raw.get("read_only_mode", False)),
+        ),
+        auto_update=auto_update,
         presentation_mode=bool(presentation_mode),
     )

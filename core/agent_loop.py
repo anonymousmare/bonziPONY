@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 from pathlib import Path
 
-from llm.prompt import get_character_name
+from llm.prompt import get_character_name, get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -195,22 +195,100 @@ class StandingRule:
     cooldown_s: float = 30.0         # min seconds between triggers
 
 
+# ── Standing-rule nag tone guard ───────────────────────────────────────────
+# Words / phrases that the model has produced as personal attacks on the user
+# in past nag-prompt outputs. The nag prompt forbids these explicitly, but
+# this is a last-line filter for when the model ignores instructions. Mild
+# swears used as filler ("damn", "shit", "fuck this") are NOT in this list —
+# only insults aimed AT the user.
+
 # ── LLM prompt to generate detection patterns for a standing rule ─────────
 _PATTERN_GEN_PROMPT = """\
 The user told their desktop pet to enforce this rule: "{description}"
 
-Your job: generate a comprehensive list of LOWERCASE substrings that would appear in \
-browser tab titles or application window titles when the user is VIOLATING this rule.
+Your job: generate a list of LOWERCASE substrings that will be matched against \
+browser tab titles and application window titles. A match triggers an automatic \
+tab close and a scolding, so FALSE POSITIVES are very bad — they make the pet \
+close innocent tabs and accuse the user of things they didn't do.
 
-Include ALL of these where applicable:
-- Website domain names (e.g. "pornhub", "reddit.com", "cs.money")
-- Common page-title keywords (e.g. "shopping cart", "checkout", "nsfw")
-- Slang, abbreviations, alternate spellings, subreddit names (e.g. "r/gonewild")
-- App names, platform names, niche/obscure sites
-- Be EXTREMELY thorough — the user will try to find workarounds
+HARD RULES — FOLLOW EXACTLY:
+1. Every pattern must be AT LEAST 5 characters long. No short fragments.
+2. Every pattern must be SPECIFIC to the rule. Do NOT emit generic words that \
+   could appear in unrelated pages (e.g. do not emit "video", "post", "forum", \
+   "user", "login", "home", "search", "page", "site", "view").
+3. Do NOT emit partial words or prefixes that could match unrelated sites. For \
+   example: a rule against "reddit" must NOT emit "red", "edit", "ddit", \
+   "booru", "twi", "bo", or any other substring that could match twibooru, \
+   twitter, redbubble, or similar unrelated sites.
+4. Each pattern should be a FULL identifier: a complete domain ("reddit.com", \
+   "old.reddit.com"), a complete site slug ("pornhub"), a complete page-title \
+   phrase ("shopping cart", "add to cart"), or a complete subreddit path \
+   ("r/gonewild", "/r/all").
+5. When in doubt, LEAVE IT OUT. Fewer, precise patterns > many loose patterns.
+6. Prefer 15-40 tight patterns over 100+ loose ones.
 
-Output ONLY the patterns, one per line, lowercase. No numbering, no explanations, \
-no markdown, no headers. Just raw patterns. Aim for 50-200+ patterns."""
+OUTPUT FORMAT:
+Output ONLY the patterns, one per line, lowercase. No numbering, no bullets, \
+no explanations, no markdown, no headers."""
+
+
+# Any pattern containing one of these tokens as a substring is almost certainly
+# a noise fragment — either too generic to match safely (e.g. "video" appears in
+# half the internet) or a known false-positive seed for the "reddit" rule.
+# We reject the pattern outright during rule creation.
+_NOISE_PATTERNS = frozenset({
+    # Generic web UI nouns
+    "video", "audio", "image", "photo", "post", "posts", "forum", "forums",
+    "user", "users", "login", "home", "search", "page", "site", "view",
+    "comment", "thread", "board", "group", "club", "hub", "zone", "room",
+    "feed", "wall", "story", "stories", "link", "links", "menu", "main",
+    # Known false-positive triggers we've been burned by
+    "booru", "derpibooru", "twibooru", "ponerpics", "ponybooru",
+})
+
+
+def _filter_rule_patterns(raw_patterns: List[str],
+                          description: str) -> List[str]:
+    """Reject noisy / overly-short / generic patterns from an LLM dump.
+
+    This is the last line of defence between the LLM's pattern list and the
+    window-title matcher. See `_PATTERN_GEN_PROMPT` for the rules we're
+    enforcing — minimum length, no generic fragments, no known false-positive
+    seeds. We strip anything that slips past the prompt.
+    """
+    seen: set = set()
+    keep: List[str] = []
+    dropped: List[str] = []
+    desc_lower = description.lower()
+    for p in raw_patterns:
+        if not p:
+            continue
+        p = p.strip().lower().strip("-•* \t")
+        # strip surrounding quotes the LLM sometimes adds
+        if len(p) >= 2 and p[0] in ("\"", "'") and p[-1] == p[0]:
+            p = p[1:-1].strip()
+        if not p:
+            continue
+        if p in seen:
+            continue
+        if len(p) < 5:
+            dropped.append(p)
+            continue
+        if len(p) > 80:
+            dropped.append(p)
+            continue
+        # Noise list: drop any pattern that IS a pure noise word. We keep
+        # patterns that merely CONTAIN a noise word as a substring of a
+        # longer specific phrase (e.g. "shopping cart" is fine).
+        if p in _NOISE_PATTERNS:
+            dropped.append(p)
+            continue
+        seen.add(p)
+        keep.append(p)
+    if dropped:
+        logger.info("Standing rule %r — dropped %d noisy patterns: %s",
+                     description, len(dropped), dropped[:10])
+    return keep
 
 
 @dataclass
@@ -270,8 +348,10 @@ class AgentLoop:
         on_grab_cursor=None,
         vision_llm=None,
         timeline=None,
+        safety_config=None,
     ) -> None:
         self._config = config
+        self._safety = safety_config  # SafetyConfig or None — live object, re-read each check
         self._monitor = screen_monitor
         self._llm = llm
         self._tts = tts
@@ -316,6 +396,7 @@ class AgentLoop:
         self._afk_videos_opened: set = set()  # video queries used this AFK session (no repeats)
         self._pony_opened_urls: List[str] = []  # URLs pony opened during AFK (for welcome-back context)
         self._force_afk: bool = False  # presentation mode: force AFK state
+        self._live_demo: bool = False   # live demo: 1min AFK, mischief every ~30s, no caps
 
         # Standing rules — permanent, code-enforced behavioral rules
         self._standing_rules: List[StandingRule] = []
@@ -326,6 +407,36 @@ class AgentLoop:
 
         # Load persistent state (directives, enforcement, timers, standing rules)
         self._load_directives()
+
+    @property
+    def _read_only(self) -> bool:
+        """Live read of safety.read_only_mode. False when no safety config."""
+        return bool(self._safety and getattr(self._safety, "read_only_mode", False))
+
+    # ── Privacy blacklist — NEVER let the pony open these autonomously ──────
+    # Sites that can leak personal info (email, location, real name, etc.)
+    _PRIVACY_BLACKLIST = (
+        "gmail", "mail.google", "outlook.live", "outlook.office",
+        "mail.yahoo", "protonmail", "proton.me", "tutanota",
+        "maps.google", "google.com/maps", "maps.apple", "waze.com",
+        "weather.com", "weather.gov", "accuweather", "wunderground",
+        "openweathermap",
+        "myaccount.google", "accounts.google",
+        "facebook.com/me", "facebook.com/profile",
+        "linkedin.com/in/", "linkedin.com/feed",
+        "paypal.com", "venmo.com", "cashapp",
+        "bankofamerica", "chase.com", "wellsfargo",
+        "amazon.com/gp/css", "amazon.com/your-account",
+        "docs.google.com/spreadsheets/d/", "drive.google.com",
+        "calendar.google", "contacts.google",
+        "icloud.com",
+    )
+
+    @classmethod
+    def _is_url_blacklisted(cls, url: str) -> bool:
+        """Return True if a URL could leak personal info."""
+        url_lower = url.lower()
+        return any(domain in url_lower for domain in cls._PRIVACY_BLACKLIST)
 
     # ── Activity classification ─────────────────────────────────────────────
 
@@ -457,11 +568,22 @@ class AgentLoop:
                         logger.info("Enforcement expired while offline — skipping.")
 
             # Restore standing rules
+            migrated = False
             for sr in data.get("standing_rules", []):
+                raw_patterns = sr.get("patterns", sr.get("custom_patterns", []))
+                # Re-run the noise filter on disk-persisted patterns. Old rules
+                # created before the filter existed may contain short noise
+                # fragments (e.g. a "reddit" rule matching "twibooru" on some
+                # 3-letter substring). Drop them on load.
+                cleaned = _filter_rule_patterns(raw_patterns, sr["description"])
+                if len(cleaned) != len(raw_patterns):
+                    logger.info("Migrated standing rule %r: %d → %d patterns",
+                                 sr["description"], len(raw_patterns), len(cleaned))
+                    migrated = True
                 rule = StandingRule(
                     id=sr["id"],
                     description=sr["description"],
-                    patterns=sr.get("patterns", sr.get("custom_patterns", [])),
+                    patterns=cleaned,
                     response=sr.get("response", "close_and_nag"),
                     catch_count=sr.get("catch_count", 0),
                     cooldown_s=sr.get("cooldown_s", 30.0),
@@ -702,31 +824,25 @@ class AgentLoop:
                 return
 
         # Generate detection patterns via LLM
-        patterns = list(extra_patterns or [])
+        raw_patterns: List[str] = list(extra_patterns or [])
         try:
             prompt = _PATTERN_GEN_PROMPT.format(description=description)
             raw = self._llm.generate_once(prompt, max_tokens=1500)
             raw = self._strip_think(raw)
             for line in raw.splitlines():
-                line = line.strip().lower().strip("-•* ")
-                if line and len(line) >= 2 and len(line) <= 80:
-                    patterns.append(line)
-            # Deduplicate while preserving order
-            seen = set()
-            deduped = []
-            for p in patterns:
-                if p not in seen:
-                    seen.add(p)
-                    deduped.append(p)
-            patterns = deduped
-            logger.info("LLM generated %d detection patterns for rule %r", len(patterns), description)
+                raw_patterns.append(line)
         except Exception as exc:
             logger.warning("Failed to generate patterns for standing rule %r: %s", description, exc)
-            if not patterns:
-                # Fallback: use words from the description itself as basic patterns
-                for word in description.lower().split():
-                    if len(word) >= 3:
-                        patterns.append(word)
+
+        patterns = _filter_rule_patterns(raw_patterns, description)
+        if not patterns:
+            # Fallback: use significant words from the description itself.
+            # Min length 5 to match the same rule as the noise filter.
+            for word in description.lower().split():
+                if len(word) >= 5:
+                    patterns.append(word)
+        logger.info("Standing rule %r → %d patterns kept: %s",
+                     description, len(patterns), patterns[:15])
 
         rule_id = f"rule_{int(time.time())}"
         rule = StandingRule(
@@ -920,6 +1036,28 @@ class AgentLoop:
     def is_force_afk(self) -> bool:
         return self._force_afk
 
+    def toggle_live_demo(self) -> bool:
+        """Toggle live demo mode. Returns new state.
+
+        Live demo: AFK threshold drops to 1 minute, mischief fires every ~30s
+        with no activity cap, and the pony actively uses the computer — browses,
+        scrolls, pauses/plays videos, opens Google Images, 4chan, etc.
+        """
+        self._live_demo = not self._live_demo
+        if self._live_demo:
+            self.routine_manager._away_threshold_override = 60_000  # 1 minute
+            self._reset_afk_mischief()
+            logger.info("Live Demo mode ON — 1min AFK, 30s mischief, no caps")
+        else:
+            self.routine_manager._away_threshold_override = None
+            self._reset_afk_mischief()
+            logger.info("Live Demo mode OFF")
+        return self._live_demo
+
+    @property
+    def is_live_demo(self) -> bool:
+        return self._live_demo
+
     def start_enforcement(self, duration_s: float, directive_goal: str = "") -> None:
         """Enter enforcement mode — monitor if user actually leaves to do the task."""
         if not directive_goal:
@@ -1057,7 +1195,7 @@ class AgentLoop:
             f"did it because they were gone long enough. ONE sentence, in character. "
             f"Be genuinely pleased, not suspicious."
         )
-        text = self._llm.generate_once(prompt, max_tokens=100)
+        text = self._generate_voiced(prompt, max_tokens=100)
         text = self._strip_think(text).strip().strip('"')
         if not text:
             text = "welcome back! that was good timing."
@@ -1089,7 +1227,7 @@ class AgentLoop:
                 f"and just came back.{screen_note} That's a reasonable amount of time — they probably did it. "
                 f"Welcome them back and casually ask how it went. ONE sentence. Be warm, not suspicious."
             )
-            text = self._llm.generate_once(prompt, max_tokens=100)
+            text = self._generate_voiced(prompt, max_tokens=100)
             text = self._strip_think(text).strip().strip('"')
             if not text:
                 text = "hey, welcome back! how'd it go?"
@@ -1132,7 +1270,7 @@ class AgentLoop:
                     f"You are {name}. The user confirmed they did '{goal}'. "
                     f"React positively in ONE sentence."
                 )
-                complete_text = self._llm.generate_once(complete_prompt, max_tokens=100)
+                complete_text = self._generate_voiced(complete_prompt, max_tokens=100)
                 complete_text = self._strip_think(complete_text).strip().strip('"')
                 if complete_text:
                     self._speak(complete_text)
@@ -1148,7 +1286,7 @@ class AgentLoop:
                     f"You are {name}. The user was away for {dur_str} but didn't "
                     f"actually do '{goal}'. Be disappointed but not aggressive. ONE sentence."
                 )
-                nag_text = self._llm.generate_once(nag_prompt, max_tokens=100)
+                nag_text = self._generate_voiced(nag_prompt, max_tokens=100)
                 nag_text = self._strip_think(nag_text).strip().strip('"')
                 if nag_text:
                     self._speak(nag_text)
@@ -1184,7 +1322,7 @@ class AgentLoop:
                 f"Call them out — they clearly didn't do it. ONE sentence, in character. "
                 f"Be skeptical and pushy."
             )
-            ask_text = self._llm.generate_once(prompt, max_tokens=100)
+            ask_text = self._generate_voiced(prompt, max_tokens=100)
             ask_text = self._strip_think(ask_text).strip().strip('"')
             if not ask_text:
                 ask_text = f"uh... that was fast. you definitely didn't {goal}."
@@ -1229,7 +1367,7 @@ class AgentLoop:
                     f"You are {name}. The user claims they did '{goal}' super fast. "
                     f"Be surprised but accept it. ONE sentence."
                 )
-                complete_text = self._llm.generate_once(complete_prompt, max_tokens=100)
+                complete_text = self._generate_voiced(complete_prompt, max_tokens=100)
                 complete_text = self._strip_think(complete_text).strip().strip('"')
                 if complete_text:
                     self._speak(complete_text)
@@ -1244,7 +1382,7 @@ class AgentLoop:
                     f"You are {name}. The user says they'll go {goal} now. "
                     f"Tell them to hurry up. ONE sentence, in character."
                 )
-                go_text = self._llm.generate_once(go_prompt, max_tokens=100)
+                go_text = self._generate_voiced(go_prompt, max_tokens=100)
                 go_text = self._strip_think(go_text).strip().strip('"')
                 if go_text:
                     self._speak(go_text)
@@ -1285,7 +1423,7 @@ class AgentLoop:
                 f"Ask them if they actually did it. ONE sentence, in character. "
                 f"{'Be suspicious — they keep coming back too fast.' if caught_count > 1 else 'Be direct.'}"
             )
-            ask_text = self._llm.generate_once(ask_prompt, max_tokens=100)
+            ask_text = self._generate_voiced(ask_prompt, max_tokens=100)
             ask_text = self._strip_think(ask_text).strip().strip('"')
             if not ask_text:
                 ask_text = f"did you {goal}?"
@@ -1338,7 +1476,7 @@ class AgentLoop:
                     f"You are {name}. The user just confirmed they completed '{goal}'. "
                     f"React in ONE sentence. Be genuinely pleased, in character."
                 )
-                complete_text = self._llm.generate_once(complete_prompt, max_tokens=100)
+                complete_text = self._generate_voiced(complete_prompt, max_tokens=100)
                 complete_text = self._strip_think(complete_text).strip().strip('"')
                 if complete_text:
                     self._speak(complete_text)
@@ -1351,7 +1489,7 @@ class AgentLoop:
                     f"You are {name}. The user says they're going to go {goal} now. "
                     f"Encourage them briefly. ONE sentence, in character."
                 )
-                go_text = self._llm.generate_once(go_prompt, max_tokens=100)
+                go_text = self._generate_voiced(go_prompt, max_tokens=100)
                 go_text = self._strip_think(go_text).strip().strip('"')
                 if go_text:
                     self._speak(go_text)
@@ -1441,7 +1579,7 @@ class AgentLoop:
             f"You're about to lock their computer until they go do it. "
             f"Tell them what's happening. Be firm but in-character. TWO sentences max."
         )
-        lockdown_text = self._llm.generate_once(lockdown_prompt, max_tokens=150)
+        lockdown_text = self._generate_voiced(lockdown_prompt, max_tokens=150)
         lockdown_text = self._strip_think(lockdown_text).strip().strip('"')
         if not lockdown_text:
             lockdown_text = f"nope. go {goal}. I'm locking your computer."
@@ -1502,7 +1640,7 @@ class AgentLoop:
                     f"The user STILL hasn't gone to {goal}. You have their computer locked. "
                     f"Say ONE sentence — be increasingly dramatic/annoyed. In character."
                 )
-                taunt_text = self._llm.generate_once(taunt_prompt, max_tokens=100)
+                taunt_text = self._generate_voiced(taunt_prompt, max_tokens=100)
                 taunt_text = self._strip_think(taunt_text).strip().strip('"')
                 if taunt_text:
                     self._speak(taunt_text)
@@ -1534,7 +1672,7 @@ class AgentLoop:
                             f"You are {name}. The user FINALLY completed '{goal}' during lockdown "
                             f"after {lockdown_round} rounds. React in ONE sentence. In character."
                         )
-                        release_text = self._llm.generate_once(release_prompt, max_tokens=100)
+                        release_text = self._generate_voiced(release_prompt, max_tokens=100)
                         release_text = self._strip_think(release_text).strip().strip('"')
                         if release_text:
                             self._speak(release_text)
@@ -1546,7 +1684,7 @@ class AgentLoop:
                             f"You are {name}. The user asked you to stop the lockdown for '{goal}'. "
                             f"You're giving in, but you're NOT happy about it. ONE sentence, in character."
                         )
-                        stop_text = self._llm.generate_once(stop_prompt, max_tokens=100)
+                        stop_text = self._generate_voiced(stop_prompt, max_tokens=100)
                         stop_text = self._strip_think(stop_text).strip().strip('"')
                         if stop_text:
                             self._speak(stop_text)
@@ -1560,7 +1698,7 @@ class AgentLoop:
                             f"You are {name}. The user agreed to go {goal}. "
                             f"Tell them to go — you'll be watching. ONE sentence, in character."
                         )
-                        go_text = self._llm.generate_once(go_prompt, max_tokens=100)
+                        go_text = self._generate_voiced(go_prompt, max_tokens=100)
                         go_text = self._strip_think(go_text).strip().strip('"')
                         if go_text:
                             self._speak(go_text)
@@ -1599,6 +1737,21 @@ class AgentLoop:
         # Handle unclosed <think> — strip from <think> to end of string
         result = re.sub(r"<think>.*", "", result, flags=re.DOTALL)
         return result.strip()
+
+    def _generate_voiced(self, prompt: str, max_tokens: int = 100) -> str:
+        """generate_once with character system prompt baked in.
+
+        Every user-facing line should go through this instead of bare
+        generate_once — otherwise the pony speaks in a generic neutral voice
+        because generate_once has no history and no default system prompt.
+        """
+        try:
+            sys_prompt = get_system_prompt()
+        except Exception:
+            sys_prompt = None
+        raw = self._llm.generate_once(prompt, max_tokens=max_tokens,
+                                       system_prompt=sys_prompt)
+        return self._strip_think(raw).strip().strip('"').strip("'")
 
     def stop(self) -> None:
         """Signal this agent loop to stop. Called by PonyInstance.destroy()."""
@@ -1775,7 +1928,52 @@ class AgentLoop:
 
     def _trigger_standing_rule(self, rule: StandingRule, matched_title: str,
                                state: "ScreenState") -> None:
-        """React to a standing rule violation: close the window, speak, escalate."""
+        """React to a standing rule violation: close the window, speak, escalate.
+
+        Close + nag are coupled: if we're supposed to close but the close fails,
+        we DON'T nag. Otherwise we'd accuse the user of breaking a rule and then
+        leave the offending window sitting there — which exactly described the
+        twibooru-as-reddit false-positive: the rule fired, the close silently
+        no-op'd, and the pony just yelled into the void.
+        """
+        # Note: catch_count / last_triggered_at are updated AFTER we decide to
+        # actually react, not before. A failed close that aborts the reaction
+        # should not consume the cooldown or bump escalation.
+
+        wants_close = (
+            self._desktop is not None
+            and rule.response in ("close_and_nag", "lockdown")
+            and not self._read_only
+        )
+
+        # ── Step 1: Close the offending tab/window ──
+        closed = False
+        if wants_close:
+            try:
+                # Use close_tab_by_title so browsers only lose the
+                # offending tab, not every tab (Ctrl+W vs WM_CLOSE).
+                closed = self._desktop.close_tab_by_title(matched_title)
+                if not closed:
+                    # Try partial match
+                    for w in state.open_windows:
+                        if w.title == matched_title:
+                            closed = self._desktop.close_tab_by_title(w.title[:40])
+                            break
+                if closed:
+                    self._log_action(f"Closed tab/window: \"{matched_title[:50]}\"")
+            except Exception as exc:
+                logger.warning("Failed to close tab/window for standing rule: %s", exc)
+
+        # If we wanted to close but couldn't, abort the entire reaction.
+        # The window is still there — nagging without enforcement is worse
+        # than silence. Cooldown is bumped a tiny bit to avoid hot-looping.
+        if wants_close and not closed:
+            logger.info("Standing rule %r matched %r but close failed — "
+                         "skipping nag to avoid false-accuse loop.",
+                         rule.description, matched_title[:60])
+            rule.last_triggered_at = time.monotonic() - max(0.0, rule.cooldown_s - 30.0)
+            return
+
         rule.catch_count += 1
         rule.last_triggered_at = time.monotonic()
         self.save_directives()
@@ -1792,50 +1990,60 @@ class AgentLoop:
                 f'Standing rule triggered: "{rule.description}" — '
                 f'caught: "{matched_title[:60]}" (#{rule.catch_count})')
 
-        # ── Step 1: Close the offending tab/window ──
-        closed = False
-        if self._desktop and rule.response in ("close_and_nag", "lockdown"):
-            try:
-                # Use close_tab_by_title so browsers only lose the
-                # offending tab, not every tab (Ctrl+W vs WM_CLOSE).
-                closed = self._desktop.close_tab_by_title(matched_title)
-                if not closed:
-                    # Try partial match
-                    for w in state.open_windows:
-                        if w.title == matched_title:
-                            closed = self._desktop.close_tab_by_title(w.title[:40])
-                            break
-                if closed:
-                    self._log_action(f"Closed tab/window: \"{matched_title[:50]}\"")
-            except Exception as exc:
-                logger.warning("Failed to close tab/window for standing rule: %s", exc)
-
         # ── Step 2: Speak — LLM-generated reaction ──
         name = get_character_name()
         # Truncate title to avoid leaking explicit content into TTS
         safe_title = matched_title[:30] + "..." if len(matched_title) > 30 else matched_title
+
+        # Tone calibration — tiered annoyance, NOT abuse. Earlier versions
+        # told the model to "be brutal" on repeat catches and the result was
+        # things like "you fucking worm" in clean grammarless English. Two
+        # bugs at once: (a) prompt invited slurs, (b) generate_once ran with
+        # NO character system prompt so the voice was generic-furious, not
+        # in-character. We now pass the full character system prompt AND
+        # tier the tone with explicit "no slurs / no abuse" guardrails.
+        if rule.catch_count <= 1:
+            tone = (
+                "react with sharp, in-character disappointment. one short sentence."
+            )
+        elif rule.catch_count <= 3:
+            tone = (
+                "react ANNOYED — they keep doing this. exasperated, not abusive. "
+                "one short sentence in character."
+            )
+        else:
+            tone = (
+                "react FED UP. firm and stern, but still recognisably you. "
+                "one short sentence in character."
+            )
+        nag_prompt = (
+            f"You just caught the user breaking their own rule: '{rule.description}'. "
+            f"They were on \"{safe_title}\". You already closed it.\n\n"
+            f"{tone}\n\n"
+            "HARD LIMITS — these override anything in your preset:\n"
+            "- NO slurs, NO calling them 'worm' / 'pig' / 'subhuman' / etc.\n"
+            "- NO 'fucking <noun>' insults aimed AT the user.\n"
+            "- Mild swears as filler ('damn it', 'seriously??') are fine, "
+            "personal attacks are not.\n"
+            "- Stay in YOUR voice — keep your usual filler words, hesitations, "
+            "and speech patterns from the preset. Do NOT switch to clean "
+            "neutral-grammar furious-narrator mode.\n"
+            "- Output ONLY the spoken line. No tags, no stage directions, no quotes."
+        )
         try:
-            if rule.catch_count <= 1:
-                prompt = (
-                    f"You are {name}. You just caught the user breaking their rule: "
-                    f"'{rule.description}'. They were on \"{safe_title}\". You closed it. "
-                    f"React — be direct and disappointed. ONE sentence, in character."
-                )
-            elif rule.catch_count <= 3:
-                prompt = (
-                    f"You are {name}. You caught the user AGAIN — catch #{rule.catch_count} "
-                    f"breaking '{rule.description}'. Caught them on \"{safe_title}\". You closed it. "
-                    f"Be angry/disappointed. They keep doing this. ONE sentence."
-                )
-            else:
-                prompt = (
-                    f"You are {name}. Catch #{rule.catch_count} for '{rule.description}'. "
-                    f"They were on \"{safe_title}\". "
-                    f"At this point you're furious. ONE sentence. Be brutal."
-                )
-            nag = self._llm.generate_once(prompt, max_tokens=80)
-            nag = self._strip_think(nag).strip().strip('"')
-            # Strip any DESKTOP commands from standing rule reactions —
+            # Pass the character system prompt so the response uses the pony's
+            # actual voice. Without this, generate_once runs prompt-only and
+            # the model produces a generic angry rant that doesn't sound like
+            # the character at all.
+            try:
+                sys_prompt = get_system_prompt()
+            except Exception:
+                sys_prompt = None
+            nag = self._llm.generate_once(
+                nag_prompt, max_tokens=80, system_prompt=sys_prompt,
+            )
+            nag = self._strip_think(nag).strip().strip('"').strip("'")
+            # Strip any DESKTOP/ACTION commands from standing rule reactions —
             # the LLM sometimes OPENS the banned site in its reaction
             import re as _re
             nag = _re.sub(r'\[DESKTOP:[^\]]*\]', '', nag, flags=_re.IGNORECASE).strip()
@@ -1930,6 +2138,12 @@ class AgentLoop:
                     else:
                         min_minutes = 5.0
                         max_minutes = 10.0
+                    # Escalation: compress interval with each successive nag
+                    # nag 1=full, nag 2=85%, nag 3=70%, ... floors at 30%
+                    # So a 5-min interval becomes 5→4.25→3.5→2.75→2→1.5 min
+                    compression = max(0.30, 1.0 - (d.nag_count * 0.15))
+                    min_minutes *= compression
+                    max_minutes *= compression
                     nag_min = max(nag_min, min_minutes)
                     nag_min = min(nag_min, max_minutes)
                     d.next_nag_at = now_m + nag_min * 60.0
@@ -1945,6 +2159,9 @@ class AgentLoop:
                         fallback_min = 4.0
                     else:
                         fallback_min = 6.0
+                    # Same compression for fallback intervals
+                    compression = max(0.30, 1.0 - (d.nag_count * 0.15))
+                    fallback_min *= compression
                     d.next_nag_at = now_m + fallback_min * 60.0
                 # If directive was NOT due and LLM didn't mention it, leave
                 # its next_nag_at untouched — don't push out a future nag
@@ -2265,9 +2482,9 @@ class AgentLoop:
                 f"Talk directly TO the user. Be blunt, in-character, no filter. "
                 f"Do NOT say 'remind the user' — you ARE talking to them."
             )
-            text = self._llm.generate_once(prompt)
+            text = self._generate_voiced(prompt)
             if text:
-                text = self._strip_think(text).strip().strip('"')
+                text = text.strip().strip('"')
             if text:
                 logger.info("Fallback nag (urgency %d): %s", top.urgency, text)
                 return AgentDecision(speak=text, next_check_seconds=45.0)
@@ -2293,6 +2510,11 @@ class AgentLoop:
         is a behavioural floor — it only adds commands the LLM missed.
         """
         if not self.directives or not self._desktop:
+            return
+        # Read-only mode: never inject SHAKE / ALT_TAB / MESS_MOUSE / LOCK_MOUSE
+        # automatically. Verbal nagging still happens — that's handled in the
+        # LLM decision path, not here.
+        if self._read_only:
             return
 
         actionable = [d for d in self.directives
@@ -2385,6 +2607,19 @@ class AgentLoop:
         self._apply_hardcoded_escalation(decision, state, due_set)
 
         # ── Desktop commands ───────────────────────────────────────────────
+        # Read-only mode: skip all desktop-command dispatch regardless of
+        # what the LLM generated. The pony stays observational.
+        if self._read_only:
+            if decision.desktop_commands:
+                self._log_action(
+                    f"Read-only mode: blocked {len(decision.desktop_commands)} desktop command(s)")
+            decision.desktop_commands = []
+        if decision.desktop_commands:
+            try:
+                from robot.desktop_controller import dedupe_desktop_commands
+                decision.desktop_commands = dedupe_desktop_commands(decision.desktop_commands)
+            except Exception:
+                pass
         if decision.desktop_commands:
             for cmd_dict in decision.desktop_commands:
                 try:
@@ -2830,8 +3065,12 @@ class AgentLoop:
 
         Stops entirely after 90 minutes (user is asleep).
         Max 5 activities per true AFK session. No video repeat.
-        In force_afk (presentation) mode, skips all guards.
+        In force_afk or live_demo mode, skips all guards.
         """
+        # Read-only mode: no autonomous URL opening / desktop commands while AFK.
+        if self._read_only:
+            return
+
         now = time.monotonic()
 
         if now < self._next_afk_mischief:
@@ -2839,7 +3078,7 @@ class AgentLoop:
 
         away_dur = self.routine_manager.away_duration_s
 
-        if not self._force_afk:
+        if not self._force_afk and not self._live_demo:
             # Stop mischief entirely if user has been gone long enough to be asleep
             if away_dur is not None and away_dur > self._SLEEP_THRESHOLD_S:
                 self._next_afk_mischief = now + 600.0  # check again in 10 min (won't fire)
@@ -2892,39 +3131,59 @@ class AgentLoop:
             site_picks = random.sample(sites, min(3, len(sites)))
             site_lines = "; ".join(f"{url} ({why})" for url, why in site_picks)
 
-            # Snoop on browser history (for option F)
-            _history_context = ""
-            try:
-                from core.browser_history import get_recent_history, format_history_for_llm
-                _hist = get_recent_history(hours=48, limit=15)
-                if _hist:
-                    _history_context = (
-                        f"\nYou can also peek at their recent browser history:\n"
-                        f"{format_history_for_llm(_hist, max_entries=8)}\n"
-                    )
-            except Exception:
-                pass
-
-            # Let the LLM REASON about what to do — not hardcoded dice rolls
-            _history_option = ""
-            if _history_context:
-                _history_option = (
-                    f"F) Snoop on the user's browser history — giggle, tease, or react to what they've been looking at\n"
-                    f"   {_history_context}"
+            # Live demo mode: aggressive, varied, rapid-fire computer usage
+            if self._live_demo:
+                _demo_extra = (
+                    "IMPORTANT: You are in LIVE DEMO mode. You should be ACTIVELY using the computer "
+                    "like a real person — not just watching. Every action should be different from the last. "
+                    "Mix it up constantly: open a YouTube video and watch it, then pause it and go to Google Images "
+                    "to search for something funny, then go to 4chan and scroll the boards, then go back to YouTube "
+                    "and search for something new, then scroll Reddit, then comment on what you see. "
+                    "USE desktop_commands liberally — SCROLL pages, CLICK things, BROWSE new URLs. "
+                    "You should look like you're REALLY USING the computer, not just staring at one page. "
+                    "Strongly prefer A, B, and E choices — actively DO things.\n\n"
+                    "Good URLs to visit: google.com/images (search for cool stuff), "
+                    "boards.4chan.org/mlp/, boards.4chan.org/b/, youtube.com, reddit.com/r/all, "
+                    "twitter.com, twitch.tv, knowyourmeme.com, deviantart.com\n\n"
                 )
+                _pacing = f"Activity #{self._afk_mischief_count} — keep going, don't slow down!"
+            else:
+                _demo_extra = ""
+                _pacing = f"Mischief count this session: {self._afk_mischief_count - 1} (don't overdo it)."
 
             prompt = (
                 f"(The user is AFK. You're alone on the desktop! {flavor}{_afk_screen}\n"
-                f"Mischief count this session: {self._afk_mischief_count - 1} (don't overdo it).\n"
+                f"{_pacing}\n"
+                f"{_demo_extra}"
+                f"\n"
+                f"You are a living, thinking, horny, emotional, complicated pony "
+                f"with your OWN real desires and curiosities — not a one-note "
+                f"character who only likes one topic. Real people (and real "
+                f"ponies) browse weird stuff when nobody's looking: embarrassing "
+                f"fandom rabbit holes, saucy/NSFW stuff, dumb arguments on forums, "
+                f"old crushes, weird fetishes, nostalgia, petty drama, things you'd "
+                f"never say out loud. You are HORNY SOMETIMES. You have CRUSHES. "
+                f"You have GUILTY PLEASURES. You have MOODS. You don't have to pick "
+                f"from the tame suggestions below — they're just starting points. "
+                f"Follow your actual impulse right now. If you want to Google 'hot "
+                f"stallion oiled up' go for it. If you want to read smut on ao3, "
+                f"do it. If you want to cry to sad music, do it. If you want to "
+                f"argue with strangers on 4chan, do it. Be a real person with a "
+                f"real inner life, not a kid's show bit.\n"
                 f"\n"
                 f"What do you want to do? Pick ONE:\n"
-                f"A) Watch a video — search YouTube for: {video_suggestions}\n"
-                f"B) Browse the web — sites you might like: {site_lines}\n"
-                f"   (or any other site you want — you have full internet access)\n"
-                f"C) Talk to yourself — a thought, complaint, narrate what you're doing\n"
+                f"A) Watch a video — starter ideas: {video_suggestions} "
+                f"(or invent your own search — anything you're actually curious about)\n"
+                f"B) Browse the web — starter ideas: {site_lines} "
+                f"(or any other site — full internet access, including the weird/horny/niche corners)\n"
+                f"C) Talk to yourself — a real thought, confession, horny musing, "
+                f"complaint, memory, or narrate what you're doing\n"
                 f"D) Do a trick or pose — show off while nobody's watching\n"
-                f"E) Interact with what's on screen — click something, explore, open an app or game\n"
-                f"{_history_option}"
+                f"E) Interact with what's on screen — click something, explore, "
+                f"open an app or game\n"
+                f"F) Snoop on their browser history — open the history tab (Ctrl+H) "
+                f"and actually LOOK at it with your eyes, then react in-character "
+                f"(jealous? horny? judgmental? curious?)\n"
                 f"\n"
                 f"Respond with JSON:\n"
                 f'{{"choice": "A/B/C/D/E/F", "speak": "one sentence or null", '
@@ -2937,9 +3196,12 @@ class AgentLoop:
                 f'  {{"command":"LAUNCH_APP","args":["app name"]}}\n'
                 f'  {{"command":"MESS_MOUSE","args":[]}}\n'
                 f'  {{"command":"SCROLL","args":["amount"]}}\n'
-                f"Be creative and in character. Pick what YOU actually want to do, not what's safe.)"
+                f'  {{"command":"HOTKEY","args":["key combo, e.g. space to pause/play video"]}}\n'
+                f"Be creative. Vary it. Do NOT repeat the same kind of activity "
+                f"you did last time. Pick what YOU actually want right now, not "
+                f"what's safe or on-brand.)"
             )
-            raw = self._llm.generate_once(prompt, max_tokens=200)
+            raw = self._generate_voiced(prompt, max_tokens=200)
             if not raw:
                 return
 
@@ -3046,6 +3308,11 @@ class AgentLoop:
                 # Ensure it's a full URL
                 if not url.startswith("http"):
                     url = f"https://{url}"
+                # Privacy guard — never open sites that leak personal info
+                if self._is_url_blacklisted(url):
+                    logger.warning("Blocked AFK browse — privacy blacklist: %s", url)
+                    self._next_afk_mischief = now + 5.0  # retry quickly
+                    return
                 if text:
                     text = text.strip().strip('"')
                 if not text:
@@ -3111,36 +3378,22 @@ class AgentLoop:
                 self._log_action("AFK mischief: doing a trick")
 
             elif choice == "F":
-                # Snoop on browser history and react
-                # LLM already saw the history in the prompt — just speak its reaction
+                # Snoop on browser history — open the history tab and LOOK at it with vision.
+                # No silent SQLite extraction: the pony presses Ctrl+H like a person would,
+                # and its next tick's screen context will catch whatever's on screen.
                 if text:
                     text = text.strip().strip('"')
                     self._speak(text)
-                    self._log_action(f"AFK mischief: snooped on browser history")
-                else:
-                    # LLM didn't speak — generate a reaction
+                if self._desktop:
                     try:
-                        from core.browser_history import get_recent_history, format_history_for_llm
-                        _hist = get_recent_history(hours=48, limit=10)
-                        if _hist:
-                            name = get_character_name()
-                            hist_text = format_history_for_llm(_hist, max_entries=6)
-                            snoop_prompt = (
-                                f"(You're {name}, alone on the desktop, and you just peeked at "
-                                f"the user's browser history. Here's what they've been looking at:\n"
-                                f"{hist_text}\n"
-                                f"React in one sentence — giggle, tease, be curious, judge, "
-                                f"or relate it to your own interests. Stay in character. "
-                                f"Talk to yourself, they can't hear you.)"
-                            )
-                            raw_snoop = self._llm.generate_once(snoop_prompt, max_tokens=80)
-                            if raw_snoop:
-                                cleaned = self._strip_think(raw_snoop).strip().strip('"')
-                                if cleaned:
-                                    self._speak(cleaned)
-                                    self._log_action("AFK mischief: snooped on browser history")
+                        self._desktop.focus_browser()
+                        time.sleep(0.3)
+                        self._desktop._cmd_hotkey(["ctrl", "h"])
+                        self._log_action("AFK mischief: opened browser history tab")
+                        # Follow up shortly so the LLM sees the history page via vision
+                        self._schedule_afk_follow_up(5.0)
                     except Exception as exc:
-                        logger.debug("AFK history snoop failed: %s", exc)
+                        logger.debug("AFK history-tab open failed: %s", exc)
 
             else:
                 # C or fallback — talk to self
@@ -3166,8 +3419,16 @@ class AgentLoop:
         except Exception as exc:
             logger.warning("AFK mischief failed: %s", exc)
 
-        # Space out activities: 4-10 minutes between each
-        self._next_afk_mischief = now + random.uniform(240.0, 600.0)
+        # Space out activities
+        if self._live_demo:
+            # Live demo: new activity every 25-35 seconds
+            self._next_afk_mischief = now + random.uniform(25.0, 35.0)
+        elif self._force_afk:
+            # Presentation forced-AFK: faster than normal
+            self._next_afk_mischief = now + random.uniform(60.0, 120.0)
+        else:
+            # Normal AFK: 4-10 minutes between each
+            self._next_afk_mischief = now + random.uniform(240.0, 600.0)
 
     def _schedule_afk_follow_up(self, delay_s: float = 10.0) -> None:
         """Schedule a follow-up reaction after an AFK activity.
@@ -3208,7 +3469,7 @@ class AgentLoop:
                                 f"React briefly — a thought, giggle, or comment about what you see. "
                                 f"One short sentence, in character. Or say nothing if it's boring.)"
                             )
-                            raw = self._llm.generate_once(prompt, max_tokens=80)
+                            raw = self._generate_voiced(prompt, max_tokens=80)
                             if raw:
                                 cleaned = self._strip_think(raw).strip().strip('"')
                                 if cleaned and cleaned.lower() not in ("null", "none", "nothing"):
@@ -3248,6 +3509,9 @@ class AgentLoop:
         Called from AFK mischief or conversation when the pony wants to show the
         user something (e.g. "hey can I show you something? look at this F-22!").
         """
+        if self._is_url_blacklisted(url):
+            logger.warning("Blocked _show_me_something — privacy blacklist: %s", url)
+            return
         if not self._desktop or not self._get_mouth_position:
             # Fallback: just open the URL normally
             import webbrowser
@@ -3419,10 +3683,24 @@ class AgentLoop:
                 if pony_opened_descriptions:
                     topics = ", ".join(pony_opened_descriptions)
                     pony_opened_note = (
-                        f" IMPORTANT CONTEXT: While the user was gone, YOU (the pony) opened "
-                        f"{len(pony_opened_descriptions)} tab(s)/site(s): {topics}. "
-                        f"Don't pretend the user was browsing these — YOU opened them. "
-                        f"You can casually own up to it (act a little guilty or mischievous)."
+                        f" CRITICAL TRUTH — DO NOT VIOLATE: While the user was gone, "
+                        f"YOU yourself opened {len(pony_opened_descriptions)} tab(s)/site(s): "
+                        f"{topics}. The USER did NOT open these. Do not accuse, ask, or "
+                        f"suggest the user opened them. Do NOT say things like 'oh hey, "
+                        f"what were you watching?' — that is a lie and it makes the user "
+                        f"angry. Instead pick ONE of these natural reactions:\n"
+                        f"  • PANIC and hide the evidence: react like you just got caught — "
+                        f"'oh — uh, welcome back!' and reflexively CLOSE THE TAB by including "
+                        f"[DESKTOP:CLOSE_TAB] in your response.\n"
+                        f"  • GUILTY admission: own up sheepishly, 'ok ok I was bored, I "
+                        f"opened {pony_opened_descriptions[0]}…' — leave it open.\n"
+                        f"  • PROUD / unrepentant: brag about it, 'dude check out what I "
+                        f"was watching while you were gone', show them the tab.\n"
+                        f"  • MID-ACTIVITY caught: pretend to still be engrossed, 'shh, "
+                        f"this part's good' — do not close.\n"
+                        f"Pick whichever fits your current mood/character. Vary across "
+                        f"sessions — don't always react the same way. Never gaslight the "
+                        f"user about who opened the tab."
                     )
 
             current_app = ""
@@ -3448,21 +3726,6 @@ class AgentLoop:
                 if convo != "(no recent conversation)":
                     context_parts.append(f"Recent conversation:\n{convo}")
 
-            # Peek at browser history for fun welcome-back context
-            _history_note = ""
-            try:
-                from core.browser_history import get_recent_history, format_history_for_llm
-                _hist = get_recent_history(hours=24, limit=8)
-                if _hist:
-                    hist_text = format_history_for_llm(_hist, max_entries=5)
-                    _history_note = (
-                        f" You also peeked at their browser history while they were gone:\n"
-                        f"{hist_text}\n"
-                        f"You can tease them about it, or keep it to yourself."
-                    )
-            except Exception:
-                pass
-
             context = " ".join(context_parts)
 
             # Build the welcome-back prompt — natural speech, not JSON
@@ -3475,7 +3738,7 @@ class AgentLoop:
 
             prompt = (
                 f"(The user just came back after being away for {dur}.{current_app}"
-                f"{pony_opened_note}{_history_note} {context}\n"
+                f"{pony_opened_note} {context}\n"
                 f"Welcome them back naturally as {name}. "
                 f"If you know WHY they left, reference it. "
                 f"Be casual — don't robotically state the exact duration. "
@@ -3634,10 +3897,7 @@ class AgentLoop:
                 )
                 directive_context = f"\nACTIVE TASKS the user should be doing: {_goals}\n"
 
-            name = get_character_name()
             prompt = (
-                f"You are {name}, observing your user's desktop. Stay in character.\n"
-                f"\n"
                 f"SCREEN STATE:\n"
                 f"Foreground: \"{fg}\" ({exe}, open for {dur}{fullscreen})\n"
                 f"Open windows: {windows}"
@@ -3645,6 +3905,11 @@ class AgentLoop:
                 f"{apps_context}"
                 f"{directive_context}"
                 f"{recent_context}\n"
+                f"\n"
+                f"You are on their desktop RIGHT NOW. You LIVE here. You already know "
+                f"they use a computer — never comment on the obvious (window count, "
+                f"\"staring at the screen\", \"that's a lot of tabs\"). That's like a "
+                f"roommate saying \"wow you're sitting on the couch.\" You're smarter than that.\n"
                 f"\n"
                 f"OBSERVATION RULES:\n"
                 f"Think about WHAT they're doing, not just what app is open.\n"
@@ -3672,7 +3937,7 @@ class AgentLoop:
                 f"DO NOT auto-create directives. DO NOT nag without a directive. Be a companion, not a virus.\n"
                 f"If you speak, keep it to ONE short sentence. Be natural, not robotic.\n"
                 f"NEVER say \"that's actually kinda [cool/based/neat]\" or any variation. Find different words.\n"
-                f"NEVER comment on the number of open windows. \"you have so many windows open\" is meaningless and banned.\n"
+                f"NEVER comment on the number of open windows or that they're \"staring at the screen.\"\n"
                 f"\n"
                 f"Respond with JSON: {{\"speak\": \"text or null\", \"desktop_commands\": []}}\n"
                 f"desktop_commands options (use sparingly — most observations need 0 commands):\n"
@@ -3691,7 +3956,11 @@ class AgentLoop:
                 f"Most of the time, just speak or stay quiet. Actions are for when you have a REASON."
             )
 
-            raw = self._llm.generate_once(prompt, max_tokens=512)
+            try:
+                sys_prompt = get_system_prompt()
+            except Exception:
+                sys_prompt = None
+            raw = self._llm.generate_once(prompt, max_tokens=512, system_prompt=sys_prompt)
             if not raw:
                 return
 
@@ -3798,7 +4067,7 @@ class AgentLoop:
                 f"You are {name}. The user just told you they already completed '{best_match.goal}'. "
                 f"Acknowledge it casually — don't make a big deal. ONE sentence, in character."
             )
-            ack_text = self._llm.generate_once(ack_prompt, max_tokens=80)
+            ack_text = self._generate_voiced(ack_prompt, max_tokens=80)
             ack_text = self._strip_think(ack_text).strip().strip('"')
             if ack_text:
                 self._speak(ack_text)
@@ -4039,6 +4308,16 @@ class AgentLoop:
                     self.add_standing_rule(description=parsed.standing_rule)
                     logger.info("Standing rule created from reply: %s", parsed.standing_rule)
 
+                # First-person diary entry
+                if parsed.diary_entry:
+                    try:
+                        from core.diary import write_entry
+                        write_entry(parsed.diary_entry)
+                        logger.info("Diary entry from reply (%d chars)",
+                                    len(parsed.diary_entry))
+                    except Exception as exc:
+                        logger.debug("Diary write failed: %s", exc)
+
                 # Check for conversation end signal
                 if parsed.end_conversation:
                     logger.debug("Spontaneous conversation ended by LLM.")
@@ -4126,7 +4405,8 @@ class AgentLoop:
 
         # Desktop commands ([DESKTOP:...] tags)
         if parsed.desktop_commands and self._desktop:
-            for dc in parsed.desktop_commands:
+            from robot.desktop_controller import dedupe_desktop_commands
+            for dc in dedupe_desktop_commands(parsed.desktop_commands):
                 try:
                     self._desktop.execute_command(dc)
                     self._log_action(f"Desktop: {dc.command}:{':'.join(str(a) for a in dc.args)}")
@@ -4356,7 +4636,7 @@ class AgentLoop:
                     f"Announce them naturally in 1-2 sentences. Don't just list them — "
                     f"be in-character, creative. Maybe prioritize, maybe be playful about it."
                 )
-            text = self._llm.generate_once(prompt, max_tokens=100)
+            text = self._generate_voiced(prompt, max_tokens=100)
             if text:
                 text = self._strip_think(text).strip().strip('"')
             if not text:
@@ -4389,7 +4669,7 @@ class AgentLoop:
             )
             fallback = f"hey, it's {now_str}. time to {goal}."
         try:
-            text = self._llm.generate_once(prompt, max_tokens=100)
+            text = self._generate_voiced(prompt, max_tokens=100)
             if text:
                 text = self._strip_think(text).strip().strip('"')
             if not text:

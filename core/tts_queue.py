@@ -219,6 +219,7 @@ class TTSQueue:
                 # Pause so the bubble is visible for a reasonable time
                 time.sleep(max(1.0, len(item.text) * 0.05))
             else:
+                _on_start_fired = False
                 try:
                     if item.voice_slug and hasattr(self._tts, "set_character"):
                         try:
@@ -226,7 +227,6 @@ class TTSQueue:
                         except Exception as exc:
                             logger.warning("TTSQueue: set_character(%r) failed: %s",
                                            item.voice_slug, exc)
-                    _on_start_fired = False
                     def _guarded_on_start():
                         nonlocal _on_start_fired
                         if not _on_start_fired:

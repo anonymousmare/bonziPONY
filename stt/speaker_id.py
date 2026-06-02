@@ -68,9 +68,55 @@ def _mel_filterbank(sr: int, n_fft: int, n_mels: int,
     return fb
 
 
+def _dct_ii(x: np.ndarray, axis: int = -1, n_out: int | None = None) -> np.ndarray:
+    """Type-II DCT with ortho normalisation — pure numpy, no scipy needed.
+
+    Equivalent to ``scipy.fftpack.dct(x, type=2, axis=axis, norm='ortho')``
+    sliced to ``[:n_out]`` along *axis*.
+    """
+    N = x.shape[axis]
+    # Reorder: interleave even/odd indices → real FFT trick for DCT-II
+    idx_even = np.arange(0, N, 2)
+    idx_odd = np.arange(N - 1 - (N % 2 == 0), -1, -2)
+    reorder = np.concatenate([idx_even, idx_odd])
+    v = np.take(x, reorder, axis=axis)
+    # FFT along the target axis
+    Vc = np.fft.rfft(v, n=N, axis=axis)
+    # Phase shift
+    k = np.arange(N)
+    shape = [1] * x.ndim
+    shape[axis] = N
+    phase = np.exp(-1j * np.pi * k / (2 * N)).reshape(shape)
+    # Trim Vc to N coefficients (rfft gives N//2+1; broadcast handles it)
+    # For full N we need the mirrored conjugates
+    if Vc.shape[axis] < N:
+        # Build full spectrum from rfft output
+        slices_pos = [slice(None)] * x.ndim
+        slices_pos[axis] = slice(1, N - Vc.shape[axis] + 1)
+        slices_neg = [slice(None)] * x.ndim
+        slices_neg[axis] = slice(None, None, -1)
+        mirror = np.conj(np.take(Vc, range(1, N - Vc.shape[axis] + 1), axis=axis))
+        flip_slices = [slice(None)] * x.ndim
+        flip_slices[axis] = slice(None, None, -1)
+        mirror = mirror[tuple(flip_slices)]
+        Vc = np.concatenate([Vc, mirror], axis=axis)
+    dct_raw = np.real(Vc * phase) * 2.0
+    # Ortho normalisation
+    norm = np.ones(N)
+    norm[0] = 1.0 / np.sqrt(4.0 * N)
+    norm[1:] = 1.0 / np.sqrt(2.0 * N)
+    norm_shape = [1] * x.ndim
+    norm_shape[axis] = N
+    dct_out = dct_raw * norm.reshape(norm_shape)
+    if n_out is not None and n_out < N:
+        sl = [slice(None)] * x.ndim
+        sl[axis] = slice(0, n_out)
+        return dct_out[tuple(sl)]
+    return dct_out
+
+
 def _extract_mfcc(audio: np.ndarray, sr: int = _SAMPLE_RATE) -> np.ndarray:
     """Extract MFCCs from a float32 audio array.  Returns (n_mfcc, T) matrix."""
-    from scipy.fftpack import dct
 
     # Pre-emphasis
     audio = np.append(audio[0], audio[1:] - 0.97 * audio[:-1])
@@ -102,8 +148,8 @@ def _extract_mfcc(audio: np.ndarray, sr: int = _SAMPLE_RATE) -> np.ndarray:
     mel_spec = np.maximum(mel_spec, 1e-10)
     log_mel = np.log(mel_spec)
 
-    # DCT → MFCCs
-    mfcc = dct(log_mel, type=2, axis=1, norm="ortho")[:, :_N_MFCC]
+    # DCT → MFCCs (pure numpy, no scipy needed)
+    mfcc = _dct_ii(log_mel, axis=1, n_out=_N_MFCC)
     return mfcc.T  # (n_mfcc, T)
 
 

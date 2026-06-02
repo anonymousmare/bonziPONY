@@ -41,9 +41,8 @@ def _save_yaml_value(key_path: str, value, config_path: str = "config.yaml") -> 
         lines = path.read_text(encoding="utf-8").splitlines(True)
 
         parts = key_path.split(".")
-        if len(parts) != 2:
+        if len(parts) not in (1, 2):
             return
-        section, key = parts
 
         # Format value for YAML
         if value is None:
@@ -56,6 +55,23 @@ def _save_yaml_value(key_path: str, value, config_path: str = "config.yaml") -> 
             yaml_val = str(value)
         else:
             yaml_val = str(value)
+
+        # Top-level single key (e.g. "auto_update")
+        if len(parts) == 1:
+            top_key = parts[0]
+            for i, line in enumerate(lines):
+                stripped = line.lstrip()
+                if stripped.startswith(f"{top_key}:") and not line.startswith((" ", "\t")):
+                    lines[i] = f"{top_key}: {yaml_val}\n"
+                    break
+            else:
+                if lines and not lines[-1].endswith("\n"):
+                    lines[-1] += "\n"
+                lines.append(f"{top_key}: {yaml_val}\n")
+            path.write_text("".join(lines), encoding="utf-8")
+            return
+
+        section, key = parts
 
         in_section = False
         section_found = False
@@ -717,6 +733,37 @@ class ContextMenuBuilder:
         if inst and not inst.is_primary:
             return self._build_secondary_menu(menu, parent)
 
+        # ── Read-Only / Auto-Update toggles (prominent, top of menu) ──
+        _ro_on = bool(getattr(cfg.safety, "read_only_mode", False))
+        _ro_label = ("🟢 Read-Only Mode: ON" if _ro_on
+                     else "🔴 Read-Only Mode: OFF")
+        ro_act = menu.addAction(_ro_label)
+        ro_act.setCheckable(True)
+        ro_act.setChecked(_ro_on)
+        ro_act.triggered.connect(lambda c: self._set_read_only(c, parent))
+
+        _au_on = bool(getattr(cfg, "auto_update", False))
+        _au_label = ("🟢 Auto-Update: ON" if _au_on
+                     else "🔴 Auto-Update: OFF")
+        au_act = menu.addAction(_au_label)
+        au_act.setCheckable(True)
+        au_act.setChecked(_au_on)
+        au_act.triggered.connect(lambda c: self._set_auto_update(c))
+
+        # Pixel font toggle — prominent so it's findable (used to be buried
+        # under Features and users couldn't find it)
+        _pf_on = getattr(cfg.desktop_pet, "font_style", "default") == "m5x7"
+        _pf_label = ("🟢 Pixel Font: ON" if _pf_on
+                     else "🔴 Pixel Font: OFF")
+        pf_act = menu.addAction(_pf_label)
+        pf_act.setCheckable(True)
+        pf_act.setChecked(_pf_on)
+        pf_act.triggered.connect(
+            lambda c: self._set_font_style("m5x7" if c else "default")
+        )
+
+        menu.addSeparator()
+
         # ── Directives submenu ────────────────────────────────────────
         dir_menu = menu.addMenu("Directives")
 
@@ -769,6 +816,18 @@ class ContextMenuBuilder:
                          lambda c: self._set("tts", "enabled", c))
         self._add_toggle(feat_menu, "Speech Bubbles", cfg.desktop_pet.speech_bubble,
                          lambda c: self._set("desktop_pet", "speech_bubble", c))
+        self._add_toggle(
+            feat_menu,
+            "Pixel Font (m5x7)",
+            getattr(cfg.desktop_pet, "font_style", "default") == "m5x7",
+            lambda c: self._set_font_style("m5x7" if c else "default"),
+        )
+        self._add_toggle(
+            feat_menu,
+            "Typewriter Sound",
+            getattr(cfg.desktop_pet, "typewriter_sound", True),
+            lambda c: self._set_typewriter_sound(c),
+        )
 
         feat_menu.addSeparator()
 
@@ -991,7 +1050,7 @@ class ContextMenuBuilder:
             act.setCheckable(True)
             # Match check: float tolerance or string equality
             if isinstance(value, float) and isinstance(current, (int, float)):
-                act.setChecked(abs(float(current) - value) < 0.5)
+                act.setChecked(abs(float(current) - value) < 0.01)
             else:
                 act.setChecked(str(current) == str(value))
             act.triggered.connect(lambda checked, v=value: callback(v))
@@ -1029,6 +1088,124 @@ class ContextMenuBuilder:
 
         logger.info("Activity level set: multiplier=%.2f, check=%.0fs",
                      multiplier, cfg.base_check_interval_s)
+
+    def _iter_speech_bubbles(self):
+        """Yield all live SpeechBubble widgets across primary + secondary ponies."""
+        seen = set()
+        if self.pony_instance is not None:
+            sb = getattr(self.pony_instance, "speech_bubble", None)
+            if sb is not None:
+                seen.add(id(sb))
+                yield sb
+        mgr = self.pony_manager
+        if mgr is not None:
+            # PonyManager exposes `.ponies`, NOT `._ponies` — the underscore
+            # version silently yields nothing and the font toggle looks dead.
+            for p in getattr(mgr, "ponies", []) or []:
+                sb = getattr(p, "speech_bubble", None)
+                if sb is not None and id(sb) not in seen:
+                    seen.add(id(sb))
+                    yield sb
+
+    def _set_font_style(self, style: str) -> None:
+        """Toggle pixel (m5x7) vs default font on all live speech bubbles.
+        Pops an immediate test bubble so the user can SEE the change."""
+        self._set("desktop_pet", "font_style", style)
+        applied = 0
+        for sb in self._iter_speech_bubbles():
+            try:
+                sb.set_font_style(style)
+                applied += 1
+            except Exception as exc:
+                logger.debug("Font style apply failed: %s", exc)
+        logger.info("Font style set to %s — applied to %d bubble(s)", style, applied)
+
+        # Fire a test bubble so the user immediately sees the new font.
+        # Without this, toggling the menu option feels dead because the
+        # bubble only appears on the next LLM response.
+        try:
+            pony = self.pony_instance
+            if pony is not None and getattr(pony, "speech_bubble", None):
+                sb = pony.speech_bubble
+                pw = getattr(pony, "pet_window", None)
+                if pw is not None:
+                    ax = pw.x() + pw.width() // 2
+                    ay = pw.y()
+                    msg = ("pixel font on!" if style == "m5x7"
+                           else "back to normal font")
+                    sb.show_text(msg, ax, ay, sprite_h=pw.height())
+        except Exception as exc:
+            logger.debug("Font test bubble failed: %s", exc)
+
+    def _set_typewriter_sound(self, enabled: bool) -> None:
+        """Toggle typewriter click on all live speech bubbles."""
+        self._set("desktop_pet", "typewriter_sound", enabled)
+        for sb in self._iter_speech_bubbles():
+            try:
+                sb.set_typewriter_sound(enabled)
+            except Exception as exc:
+                logger.debug("Typewriter toggle apply failed: %s", exc)
+
+    def _set_read_only(self, enabled: bool, parent: QWidget) -> None:
+        """Toggle read-only / safe mode. Flips safety.read_only_mode + disables
+        desktop_control in one meta-action. LLM/TTS provider switches require
+        a restart — we surface that to the user with a MessageBox."""
+        self._set("safety", "read_only_mode", bool(enabled))
+        # Also disable desktop_control so the menu state matches the guard
+        if enabled:
+            self._set("desktop_control", "enabled", False)
+        logger.info("Read-Only mode: %s", "ON" if enabled else "OFF")
+
+        # Let the LLM know live — system prompt will start including the
+        # read-only notice on the next chat turn.
+        try:
+            from llm.prompt import set_safety_config
+            set_safety_config(self.config.safety)
+        except Exception:
+            pass
+
+        needs_restart = False
+        if enabled:
+            prov = (self.config.llm.provider or "").lower()
+            if prov in {"anthropic", "openai", "openrouter", "deepseek", "groq",
+                        "gemini", "google", "mistral", "cohere", "xai", "grok", "zai"}:
+                needs_restart = True
+            if (self.config.tts.provider or "").lower() != "openai_compatible":
+                needs_restart = True
+
+        if needs_restart:
+            QMessageBox.information(
+                parent, "Read-Only Mode",
+                "Read-Only mode is ON.\n\n"
+                "Runtime behaviors (desktop commands, AFK mischief, force-\n"
+                "escalation, standing-rule closing) are now blocked.\n\n"
+                "Your LLM/TTS providers are cloud-based. Restart the app to\n"
+                "switch to local-only LLM/TTS. Until restart, the app keeps\n"
+                "using the current providers for conversation.",
+            )
+
+    def _set_auto_update(self, enabled: bool) -> None:
+        """Toggle auto-update and sync the marker file retardsetup.bat reads."""
+        # Persist to config.yaml at top level (not nested under a section)
+        self.config.auto_update = bool(enabled)
+        try:
+            _save_yaml_value("auto_update", bool(enabled), self.config_path)
+        except Exception as exc:
+            logger.debug("auto_update persist failed: %s", exc)
+
+        # Create / remove the marker file
+        try:
+            from pathlib import Path as _Path
+            marker = _Path(".autoupdate_enabled")
+            if enabled:
+                if not marker.exists():
+                    marker.write_text("1", encoding="utf-8")
+            else:
+                if marker.exists():
+                    marker.unlink()
+        except Exception as exc:
+            logger.debug("auto_update marker sync failed: %s", exc)
+        logger.info("Auto-Update: %s", "ON" if enabled else "OFF")
 
     def _set_screen_vision(self, provider: str) -> None:
         """Switch between API and Moondream screen vision.  Requires restart for Moondream."""
@@ -1514,6 +1691,12 @@ class ContextMenuBuilder:
         afk_act.triggered.connect(self._toggle_force_afk)
         afk_act.setEnabled(self.agent_loop is not None)
 
+        # Live Demo — 1min AFK, mischief every 30s, active computer usage
+        demo_label = "Live Demo: ON" if (self.agent_loop and self.agent_loop.is_live_demo) else "Live Demo: OFF"
+        demo_act = pres_menu.addAction(demo_label)
+        demo_act.triggered.connect(self._toggle_live_demo)
+        demo_act.setEnabled(self.agent_loop is not None)
+
         pres_menu.addSeparator()
 
         # Trigger Group Chat — immediate inter-pony banter
@@ -1539,6 +1722,13 @@ class ContextMenuBuilder:
             return
         new_state = self.agent_loop.toggle_force_afk()
         logger.info("Presentation: AFK toggled to %s", new_state)
+
+    def _toggle_live_demo(self) -> None:
+        """Toggle live demo mode — 1min AFK, 30s mischief, active computer use."""
+        if not self.agent_loop:
+            return
+        new_state = self.agent_loop.toggle_live_demo()
+        logger.info("Presentation: Live Demo toggled to %s", new_state)
 
     def _force_group_chat(self) -> None:
         """Immediately trigger a group conversation."""

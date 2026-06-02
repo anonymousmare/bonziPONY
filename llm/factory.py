@@ -8,6 +8,14 @@ from llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
+# Providers that send data to the cloud. In read-only mode these are refused
+# and the factory falls through to a local/offline provider instead.
+_CLOUD_PROVIDERS = {
+    "anthropic", "openai", "openrouter", "deepseek", "groq",
+    "gemini", "google", "mistral", "cohere", "xai", "grok", "zai",
+}
+
+
 # Well-known provider → default base_url (user can still override via config)
 _KNOWN_BASE_URLS = {
     # Cloud providers
@@ -42,6 +50,33 @@ def get_provider(config) -> LLMProvider:
     cfg: LLMConfig = config.llm
 
     provider = cfg.provider.lower()
+
+    # ── Read-only mode: refuse cloud providers ──────────────────────────
+    # When safety.read_only_mode is True we must not send conversation
+    # content to a third-party API. Fall back to a local Ollama default so
+    # the app still starts. The user can flip safety off to reconnect.
+    safety = getattr(config, "safety", None)
+    read_only = bool(safety and getattr(safety, "read_only_mode", False))
+    if read_only and provider in _CLOUD_PROVIDERS:
+        logger.warning(
+            "Read-only mode: refusing cloud LLM provider %r. "
+            "Falling back to local Ollama at %s. "
+            "Disable Read-Only in the right-click menu to restore %s.",
+            provider, _KNOWN_BASE_URLS["ollama"], provider,
+        )
+        provider = "ollama"
+        # Blank the api_key so the local server isn't handed a cloud secret
+        from llm.openai_provider import OpenAIProvider
+        return OpenAIProvider(
+            api_key="no-key",
+            model=cfg.model if "/" in cfg.model or ":" in cfg.model else "llama3.2",
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            max_history_turns=cfg.max_history_turns,
+            base_url=_KNOWN_BASE_URLS["ollama"],
+            prefill=cfg.prefill,
+        )
+
     logger.info("Using LLM provider: %s  model: %s", provider, cfg.model)
 
     if provider == "anthropic":

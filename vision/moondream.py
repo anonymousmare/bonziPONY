@@ -69,9 +69,9 @@ class MoondreamDescriber:
             model_id = "vikhyatk/moondream2"
             print(f"[Moondream] Downloading/loading model '{model_id}' on {self._device}...", flush=True)
             logger.info("Loading Moondream2 (%s)...", self._device)
-            tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(model_id)
             model = AutoModelForCausalLM.from_pretrained(
-                model_id, trust_remote_code=True,
+                model_id,
             ).to(self._device).eval()
             with self._lock:
                 self._tokenizer = tokenizer

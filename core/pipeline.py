@@ -444,7 +444,8 @@ class Pipeline:
                     except Exception as exc:
                         logger.debug("Spontaneous action %s failed: %s", action, exc)
             if parsed.desktop_commands and self.desktop_controller:
-                for dc in parsed.desktop_commands:
+                from robot.desktop_controller import dedupe_desktop_commands
+                for dc in dedupe_desktop_commands(parsed.desktop_commands):
                     try:
                         self.desktop_controller.execute_command(dc)
                     except Exception as exc:
@@ -488,15 +489,27 @@ class Pipeline:
                 return
 
             transcript = "\n".join(transcript_lines[-30:])
+            # First-person journal-style summary so the pony remembers "her own"
+            # sessions on next load, instead of reading a clinical bullet list.
             prompt = (
-                "Summarize this conversation in 3-5 bullet points. "
-                "Be as brief as possible — key topics, anything important said, "
-                "notable moments. Plain text, no formatting.\n\n"
+                "Write a short first-person recap of this conversation from your "
+                "own perspective, as if you're jotting down a few lines in your "
+                "own memory log at day's end. 3–5 sentences, plain text, no "
+                "bullet points, no formatting. Use 'I' and 'he/she' for the "
+                "user. Keep what mattered — topics, feelings, things said, any "
+                "promises or plans. Drop filler. Write it as yourself, not as "
+                "an assistant.\n\n"
                 f"Conversation:\n{transcript}"
             )
+            # Use in-character system prompt so voice stays consistent
+            try:
+                from llm.prompt import get_system_prompt
+                char_system = get_system_prompt()
+            except Exception:
+                char_system = None
             summary = self.llm.generate_once(
                 prompt, max_tokens=512,
-                system_prompt="You are a helpful assistant that summarizes conversations. Be concise and factual. Do NOT role-play or respond in character.",
+                system_prompt=char_system,
             )
             if summary and summary.strip():
                 from core.memory import save_summary
@@ -728,7 +741,8 @@ class Pipeline:
                         logger.warning("Action %s failed: %s", action, exc)
 
             if parsed.desktop_commands and self.desktop_controller:
-                for cmd in parsed.desktop_commands:
+                from robot.desktop_controller import dedupe_desktop_commands
+                for cmd in dedupe_desktop_commands(parsed.desktop_commands):
                     try:
                         self.desktop_controller.execute_command(cmd)
                     except Exception as exc:
@@ -755,6 +769,14 @@ class Pipeline:
             # Create standing rule from conversation if LLM used [RULE:...] tag
             if parsed.standing_rule and self.agent_loop:
                 self.agent_loop.add_standing_rule(description=parsed.standing_rule)
+
+            # First-person diary entry if LLM used [DIARY:...] tag
+            if parsed.diary_entry:
+                try:
+                    from core.diary import write_entry
+                    write_entry(parsed.diary_entry)
+                except Exception as exc:
+                    logger.debug("Diary write failed: %s", exc)
 
             # Create recurring routines from conversation if LLM used [ROUTINE:...] tags
             # Uses collapse_routine_tags to merge multiple tags with the same goal

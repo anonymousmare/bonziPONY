@@ -189,8 +189,16 @@ class OpenAICompatibleTTS:
         except Exception:
             pass
 
-        sd.play(audio_f32, **play_kwargs)
-        sd.wait()
+        try:
+            sd.play(audio_f32, **play_kwargs)
+            sd.wait()
+        except sd.PortAudioError:
+            if self.output_device_index is not None:
+                logger.warning("Audio device %d failed — falling back to default.", self.output_device_index)
+                sd.play(audio_f32, samplerate=sample_rate)
+                sd.wait()
+            else:
+                raise
         logger.debug("TTS playback complete.")
 
     @staticmethod

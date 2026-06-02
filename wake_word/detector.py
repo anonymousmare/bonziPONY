@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import re
 import threading
 import time
 from typing import Dict, List, Optional
@@ -277,8 +278,11 @@ class WakeWordDetector:
                         logger.debug("Wake detector heard: %r (normalized: %r)", text_lower, text_normalized)
 
                         # Check for any matching wake phrase (try both raw and normalized)
+                        # Use word-boundary matching to avoid false positives
+                        # like "dash" matching "dashboard".
                         for idx, phrase in enumerate(self._phrases):
-                            if phrase in text_lower or phrase in text_normalized:
+                            if (re.search(r'(?:^|\b)' + re.escape(phrase) + r'(?:\b|$)', text_lower) or
+                                re.search(r'(?:^|\b)' + re.escape(phrase) + r'(?:\b|$)', text_normalized)):
                                 logger.info(
                                     "Wake phrase detected: '%s' in '%s'",
                                     phrase, text_lower,

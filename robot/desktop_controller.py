@@ -36,6 +36,75 @@ _VOLUME_ACTIONS = {
 # Default allowlist for OPEN command
 _DEFAULT_ALLOWED_APPS = ["notepad", "calculator", "calc", "explorer", "chrome", "firefox", "mspaint"]
 
+_BROWSER_APP_NAMES = {"chrome", "firefox", "edge", "msedge", "opera", "brave", "vivaldi", "browser"}
+
+# Common site-name shortcuts that, when emitted as OPEN:<name>, really mean
+# "open this site in a browser" — already handled by BROWSE, so OPEN would
+# just launch a second tab (or the browser homepage) on top of it.
+_SITE_SHORTCUT_NAMES = {
+    "youtube", "yt", "google", "reddit", "twitter", "x", "twitch", "4chan",
+    "github", "wikipedia", "steam", "discord", "instagram", "tiktok",
+    "facebook", "spotify", "pinterest", "tumblr", "bing", "duckduckgo",
+}
+
+
+def dedupe_desktop_commands(cmds):
+    """Collapse redundant DESKTOP commands before dispatch.
+
+    Fixes the common LLM pattern where the model emits both an OPEN and a
+    follow-up action that would open the same app itself:
+      - OPEN:chrome + BROWSE:site  → two tabs (blank + target)
+      - OPEN:notepad + WRITE_NOTEPAD:... → two notepad windows
+
+    Also drops exact consecutive duplicates so a double-emitted command
+    only fires once.
+
+    Accepts a list of either ``DesktopCommand`` dataclass instances or raw
+    dicts (as the agent loop produces). Returns a new list of the same shape.
+    """
+    if not cmds:
+        return cmds
+
+    def _key(c):
+        if isinstance(c, dict):
+            cmd = str(c.get("command", "")).upper()
+            args = tuple(str(a) for a in (c.get("args") or []))
+        else:
+            cmd = str(getattr(c, "command", "")).upper()
+            args = tuple(str(a) for a in (getattr(c, "args", None) or []))
+        return cmd, args
+
+    keyed = [(_key(c), c) for c in cmds]
+    commands_upper = [k[0][0] for k in keyed]
+    has_browse = "BROWSE" in commands_upper
+    has_write_notepad = "WRITE_NOTEPAD" in commands_upper
+
+    kept = []
+    seen = set()
+    for (cmd_u, arg_tuple), original in keyed:
+        # Drop exact repeats (e.g. LLM emits the same command twice)
+        if (cmd_u, arg_tuple) in seen:
+            logger.info("Dedupe: dropping repeat %s %s", cmd_u, arg_tuple)
+            continue
+        # Drop OPEN:<browser|url|site> when any BROWSE follows — BROWSE handles it.
+        # Covers: OPEN:chrome, OPEN:youtube, OPEN:youtube.com, OPEN:https://..., etc.
+        if cmd_u == "OPEN" and has_browse and arg_tuple:
+            first = arg_tuple[0].lower().strip()
+            is_browser = any(b in first for b in _BROWSER_APP_NAMES)
+            is_url = ("://" in first) or ("." in first and "/" not in first[:4])
+            is_site_shortcut = first in _SITE_SHORTCUT_NAMES
+            if is_browser or is_url or is_site_shortcut:
+                logger.info("Dedupe: dropping OPEN %s (BROWSE present)", first)
+                continue
+        # Drop OPEN:notepad when WRITE_NOTEPAD follows — WRITE_NOTEPAD launches it
+        if cmd_u == "OPEN" and has_write_notepad and arg_tuple:
+            if "notepad" in arg_tuple[0].lower():
+                logger.info("Dedupe: dropping OPEN notepad (WRITE_NOTEPAD present)")
+                continue
+        seen.add((cmd_u, arg_tuple))
+        kept.append(original)
+    return kept
+
 # Hotkeys that must never be sent
 _BLOCKED_HOTKEYS = {
     "ctrl+alt+delete", "ctrl+alt+del",
@@ -311,7 +380,15 @@ class DesktopController:
     def close_tab_by_title(self, title_substring: str) -> bool:
         """Focus the window matching *title_substring* and send Ctrl+W to close
         only the browser tab (not the whole browser).  Falls back to WM_CLOSE
-        for non-browser windows.  Returns True if the window was found."""
+        for non-browser windows.
+
+        Verifies the close actually took effect by re-reading the window title
+        afterwards. Returns True ONLY if the matched substring is gone from the
+        window title (or the window itself disappeared). Without this check the
+        function used to return True the moment Ctrl+W was sent — but if focus
+        failed, the user changed tabs first, or the OS blocked SetForegroundWindow,
+        Ctrl+W would do nothing and the caller would still nag the user.
+        """
         hwnd = self._find_window_by_title(title_substring)
         if hwnd is None:
             logger.info("No window found matching %r to close tab.", title_substring)
@@ -327,12 +404,79 @@ class DesktopController:
             try:
                 import win32gui
                 import win32con
+                import time
+
+                # Snapshot what the title contained before we tried to close
+                needle = title_substring.lower().strip()
+                try:
+                    pre_title = win32gui.GetWindowText(hwnd) or ""
+                except Exception:
+                    pre_title = ""
+
                 if win32gui.IsIconic(hwnd):
                     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                win32gui.SetForegroundWindow(hwnd)
-                import time
-                time.sleep(0.15)  # let the OS finish the focus switch
+
+                # SetForegroundWindow can fail silently on Windows when no
+                # input context exists — try to nudge the OS into letting us
+                # take focus by attaching to the foreground thread first.
+                try:
+                    import ctypes
+                    user32 = ctypes.windll.user32
+                    fg = user32.GetForegroundWindow()
+                    if fg and fg != hwnd:
+                        cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+                        target_thread = user32.GetWindowThreadProcessId(fg, None)
+                        user32.AttachThreadInput(cur_thread, target_thread, True)
+                        try:
+                            win32gui.SetForegroundWindow(hwnd)
+                        finally:
+                            user32.AttachThreadInput(cur_thread, target_thread, False)
+                    else:
+                        win32gui.SetForegroundWindow(hwnd)
+                except Exception:
+                    try:
+                        win32gui.SetForegroundWindow(hwnd)
+                    except Exception:
+                        pass
+
+                time.sleep(0.18)  # let the OS finish the focus switch
+
+                # Verify focus actually landed before sending Ctrl+W —
+                # otherwise we'd send the keystroke to whatever window did
+                # have focus, which would close an innocent tab.
+                try:
+                    import ctypes
+                    fg_now = ctypes.windll.user32.GetForegroundWindow()
+                except Exception:
+                    fg_now = hwnd  # assume best-case if we can't query
+                if fg_now != hwnd:
+                    logger.info(
+                        "close_tab_by_title: focus did not land on target "
+                        "(want HWND=%d, got HWND=%d) — aborting Ctrl+W.",
+                        hwnd, fg_now,
+                    )
+                    return False
+
                 self._pyautogui.hotkey("ctrl", "w")
+                time.sleep(0.20)  # let the browser actually process the close
+
+                # Verification: the matched title should no longer be in the
+                # window title for this HWND. If the HWND is gone entirely
+                # (whole window closed) that also counts as success.
+                try:
+                    if not win32gui.IsWindow(hwnd):
+                        logger.info("Closed browser window matching %r (HWND=%d)", title_substring, hwnd)
+                        return True
+                    post_title = (win32gui.GetWindowText(hwnd) or "").lower()
+                except Exception:
+                    post_title = ""
+                if needle and needle in post_title:
+                    logger.info(
+                        "close_tab_by_title: Ctrl+W sent but title still "
+                        "contains %r (was %r, still %r) — close failed.",
+                        needle, pre_title[:80], post_title[:80],
+                    )
+                    return False
                 logger.info("Closed browser TAB matching %r (HWND=%d)", title_substring, hwnd)
                 return True
             except Exception as exc:
@@ -519,7 +663,11 @@ class DesktopController:
             logger.warning("CLICK requires x and y args.")
             return
 
-        x, y = int(args[0]), int(args[1])
+        try:
+            x, y = int(args[0]), int(args[1])
+        except (ValueError, IndexError):
+            logger.warning("CLICK: invalid coordinates %r", args)
+            return
         from core.monitor_utils import get_virtual_desktop_rect
         virt = get_virtual_desktop_rect()
 
@@ -546,9 +694,13 @@ class DesktopController:
         from core.monitor_utils import get_virtual_desktop_rect
         virt = get_virtual_desktop_rect()
 
-        x1, y1 = int(args[0]), int(args[1])
-        x2, y2 = int(args[2]), int(args[3])
-        duration = float(args[4]) if len(args) > 4 else 1.0
+        try:
+            x1, y1 = int(args[0]), int(args[1])
+            x2, y2 = int(args[2]), int(args[3])
+            duration = float(args[4]) if len(args) > 4 else 1.0
+        except (ValueError, IndexError):
+            logger.warning("DRAG: invalid coordinates %r", args)
+            return
         duration = max(0.2, min(duration, 10.0))
 
         # Bounds check
@@ -726,9 +878,30 @@ class DesktopController:
 
         raw = ":".join(args).strip()  # Rejoin in case URL contained colons
 
+        # Privacy blacklist — NEVER open sites that can leak personal info
+        _PRIVACY_BLACKLIST = (
+            "gmail", "mail.google", "outlook.live", "outlook.office",
+            "mail.yahoo", "protonmail", "proton.me", "tutanota",
+            "maps.google", "google.com/maps", "maps.apple", "waze.com",
+            "weather.com", "weather.gov", "accuweather", "wunderground",
+            "openweathermap",
+            "myaccount.google", "accounts.google",
+            "facebook.com/me", "facebook.com/profile",
+            "linkedin.com/in/", "linkedin.com/feed",
+            "paypal.com", "venmo.com", "cashapp",
+            "bankofamerica", "chase.com", "wellsfargo",
+            "amazon.com/gp/css", "amazon.com/your-account",
+            "docs.google.com/spreadsheets/d/", "drive.google.com",
+            "calendar.google", "contacts.google",
+            "icloud.com",
+        )
+        raw_lower = raw.lower()
+        if any(domain in raw_lower for domain in _PRIVACY_BLACKLIST):
+            logger.warning("Blocked BROWSE — privacy blacklist: %s", raw)
+            return
+
         # Check against standing rule blocklist before doing anything
         if self._blocked_url_patterns:
-            raw_lower = raw.lower()
             for pattern in self._blocked_url_patterns:
                 if pattern in raw_lower:
                     logger.warning("Blocked BROWSE — matches standing rule: %s", pattern)
@@ -780,7 +953,11 @@ class DesktopController:
             logger.warning("SCROLL requires amount arg.")
             return
 
-        amount = int(args[0])
+        try:
+            amount = int(args[0])
+        except ValueError:
+            logger.warning("SCROLL: invalid amount %r", args[0])
+            return
         # Clamp scroll amount
         amount = max(-20, min(20, amount))
 
@@ -806,40 +983,75 @@ class DesktopController:
 
         logger.info("WRITE_NOTEPAD: %d chars", len(text))
 
-        # 1. Launch notepad
-        try:
-            proc = subprocess.Popen(["notepad.exe"])
-        except Exception as exc:
-            logger.warning("Failed to launch notepad: %s", exc)
-            return
-
-        # 2. Wait for the Notepad window to appear and get focus
+        # 1. Reuse any existing Notepad window instead of always launching new.
+        # This fixes the "two notepads open" bug when OPEN:notepad runs first.
+        notepad_hwnd = 0
         try:
             import win32gui
             import win32con
 
-            notepad_hwnd = 0
-            for _ in range(60):  # up to ~3 seconds
-                time.sleep(0.05)
-                fg = win32gui.GetForegroundWindow()
+            def _find_notepad(hwnd, _):
                 try:
-                    cls = win32gui.GetClassName(fg)
+                    cls = win32gui.GetClassName(hwnd)
                 except Exception:
                     cls = ""
-                if cls == "Notepad" or "notepad" in cls.lower():
-                    notepad_hwnd = fg
-                    break
+                if (cls == "Notepad" or "notepad" in cls.lower()) and win32gui.IsWindowVisible(hwnd):
+                    notepad_list.append(hwnd)
 
-            if notepad_hwnd == 0:
-                logger.warning("WRITE_NOTEPAD: Notepad window not found after launch.")
+            notepad_list: list[int] = []
+            try:
+                win32gui.EnumWindows(_find_notepad, None)
+            except Exception:
+                pass
+
+            if notepad_list:
+                notepad_hwnd = notepad_list[0]
+                logger.info("WRITE_NOTEPAD: reusing existing Notepad (HWND=%d)", notepad_hwnd)
+                try:
+                    win32gui.ShowWindow(notepad_hwnd, win32con.SW_RESTORE)
+                    win32gui.SetForegroundWindow(notepad_hwnd)
+                    time.sleep(0.15)
+                    # Jump cursor to end so the paste appends cleanly,
+                    # and prepend a blank line so it doesn't merge into
+                    # whatever the user was already typing.
+                    self._pyautogui.hotkey("ctrl", "end")
+                    time.sleep(0.05)
+                    if text and not text.startswith(("\n", "\r")):
+                        text = "\n\n" + text
+                except Exception as exc:
+                    logger.debug("Notepad focus/cursor failed: %s", exc)
+        except ImportError:
+            pass
+
+        # 2. If no existing Notepad, launch a new one
+        if notepad_hwnd == 0:
+            try:
+                subprocess.Popen(["notepad.exe"])
+            except Exception as exc:
+                logger.warning("Failed to launch notepad: %s", exc)
                 return
 
-            # Give it a moment to finish initializing
-            time.sleep(0.2)
+            try:
+                import win32gui
+                for _ in range(60):  # up to ~3 seconds
+                    time.sleep(0.05)
+                    fg = win32gui.GetForegroundWindow()
+                    try:
+                        cls = win32gui.GetClassName(fg)
+                    except Exception:
+                        cls = ""
+                    if cls == "Notepad" or "notepad" in cls.lower():
+                        notepad_hwnd = fg
+                        break
 
-        except ImportError:
-            # No win32gui — just wait and hope
-            time.sleep(1.0)
+                if notepad_hwnd == 0:
+                    logger.warning("WRITE_NOTEPAD: Notepad window not found after launch.")
+                    return
+
+                # Give it a moment to finish initializing
+                time.sleep(0.2)
+            except ImportError:
+                time.sleep(1.0)
 
         # 3. Paste via clipboard (handles newlines, unicode, and is fast)
         try:

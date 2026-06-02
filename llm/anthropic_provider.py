@@ -53,7 +53,7 @@ class AnthropicProvider(LLMProvider):
                 return self._client.messages.create(**kwargs)
             except Exception as exc:
                 status = getattr(exc, "status_code", None)
-                retryable = status is not None and status >= 500
+                retryable = status is not None and (status >= 500 or status == 429)
                 if not retryable:
                     # Also retry on connection / timeout errors
                     retryable = isinstance(exc, (ConnectionError, TimeoutError))

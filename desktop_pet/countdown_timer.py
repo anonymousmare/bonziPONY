@@ -87,7 +87,7 @@ class CountdownTimer(QWidget):
         if screen:
             geom = screen.availableGeometry()
             px = max(geom.left(), min(px, geom.right() - self.width()))
-            py = min(py, geom.bottom() - self.height())
+            py = max(geom.top(), min(py, geom.bottom() - self.height()))
         self.move(px, py)
 
     def paintEvent(self, event) -> None:

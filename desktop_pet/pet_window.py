@@ -644,6 +644,10 @@ class PetWindow(QWidget):
         # Schedule random direction changes every 1-2s
         if self._grab_run_timer is not None:
             self._grab_run_timer.stop()
+            try:
+                self._grab_run_timer.timeout.disconnect(self._grab_run_change_dir)
+            except TypeError:
+                pass
             self._grab_run_timer.deleteLater()
         self._grab_run_timer = QTimer(self)
         self._grab_run_timer.timeout.connect(self._grab_run_change_dir)
@@ -669,6 +673,11 @@ class PetWindow(QWidget):
         self._grab_running = False
         if self._grab_run_timer:
             self._grab_run_timer.stop()
+            try:
+                self._grab_run_timer.timeout.disconnect(self._grab_run_change_dir)
+            except TypeError:
+                pass
+            self._grab_run_timer.deleteLater()
             self._grab_run_timer = None
         self._roaming = True
         self._pick_and_start_behavior()
@@ -724,7 +733,6 @@ class PetWindow(QWidget):
             return
         if event.button() == Qt.LeftButton:
             self._dragging = True
-            self._drag_offset = event.globalPos() - self.pos()
             self._was_roaming_before_drag = self._roaming or bool(self._timed_override_until)
             self._roaming = False
             self._dx = 0
@@ -739,10 +747,17 @@ class PetWindow(QWidget):
             self._frame_index = 0
             self._last_frame_time = time.monotonic()
             if self._current_anim and self._current_anim.frames:
-                self.setFixedSize(
-                    self._current_anim.frames[0].width(),
-                    self._current_anim.frames[0].height(),
-                )
+                new_w = self._current_anim.frames[0].width()
+                new_h = self._current_anim.frames[0].height()
+                # Keep the widget centered on the click so the cursor stays
+                # inside the new (often smaller) drag sprite. Without this,
+                # the second press of a double-click lands outside the widget
+                # and Qt never fires mouseDoubleClickEvent.
+                gp = event.globalPos()
+                self.setFixedSize(new_w, new_h)
+                self.move(gp.x() - new_w // 2, gp.y() - new_h // 2)
+            # Recompute drag offset AFTER possible reposition
+            self._drag_offset = event.globalPos() - self.pos()
             self.setCursor(QCursor(Qt.ClosedHandCursor))
 
     def mouseMoveEvent(self, event) -> None:
@@ -772,6 +787,10 @@ class PetWindow(QWidget):
             # Cancel any drag state from the first press
             self._dragging = False
             self.setCursor(QCursor(Qt.ArrowCursor))
+            # Re-center the pony on the cursor so follow-up interactions
+            # (and the input dialog anchor) land predictably.
+            gp = event.globalPos()
+            self.move(gp.x() - self.width() // 2, gp.y() - self.height() // 2)
             from PyQt5.QtWidgets import QInputDialog, QLineEdit
             text, ok = QInputDialog.getText(
                 self, "Talk to the pony",

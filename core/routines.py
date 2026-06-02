@@ -95,6 +95,7 @@ class RoutineManager:
         self._was_away: bool = True                   # default; overridden by _load_wake_state
         self._away_since: Optional[datetime] = None   # when the user went away
         self._last_state_save: float = 0.0            # throttle disk writes
+        self._away_threshold_override: Optional[int] = None  # ms; set by live demo mode
         self._load()
         self._load_wake_state()
 
@@ -220,7 +221,9 @@ class RoutineManager:
         """
         import time as _time
 
-        if media_active:
+        if self._away_threshold_override is not None:
+            threshold = self._away_threshold_override
+        elif media_active:
             threshold = MEDIA_AWAY_THRESHOLD_MS
         elif windowed_media_active:
             threshold = WINDOWED_MEDIA_AWAY_THRESHOLD_MS
