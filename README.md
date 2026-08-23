@@ -477,6 +477,26 @@ librosa              # Audio features
 
 Windows only. Depends on `pywin32` for window manipulation, `win32gui` for idle time detection, and Win32 APIs for desktop control and screen monitoring.
 
+## The bundled CLOP monitor
+
+`clop_monitor/` is the 4CLOP game monitor, vendored so this is one clone and one thing to run.
+It is a plain directory that goes on `sys.path`, not a package — its modules import each other
+by bare name, which is how it runs as a program.
+
+It still works standalone if you want toasts without the pony:
+
+```bash
+cd clop_monitor
+python clop_monitor.py            # long-running, Windows toasts
+python clop_monitor.py --once     # poll once and exit
+python -m unittest                # its own 593 tests
+```
+
+Credentials and watched goods live in `clop_monitor/.env` and `clop_monitor/settings.json`
+(copy the `.example` files). The pet reads the same two files, so configuring one configures
+both. `clop.monitor_path` in `config.yaml` can point somewhere else if you keep a development
+checkout.
+
 ## Refreshing the CLOP game data
 
 `data/gamedata.json` is generated from the game's own SQL. It is what stops the character

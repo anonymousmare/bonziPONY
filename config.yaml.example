@@ -110,7 +110,7 @@ tts:
 
 clop:
   enabled: false               # turn on to run the 4CLOP monitor inside this process
-  monitor_path: "../clop-alerts-windownotifs"   # your checkout of the monitor repo
+  monitor_path: "clop_monitor"  # the bundled monitor. Point elsewhere for a dev checkout.
   base_url: "https://4clop.org/"
   # Left unset, these use the monitor checkout's own files:
   # settings_file: null        # defaults to <monitor_path>/settings.json

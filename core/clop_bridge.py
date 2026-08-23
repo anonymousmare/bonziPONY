@@ -1,20 +1,23 @@
 """Runs the CLOP monitor's poll loop inside the pet's process.
 
-The monitor (the ``clop-alerts-windownotifs`` checkout) is a standalone program that polls the
-game every 60 seconds and raises Windows toasts. Everything platform-specific about it lives
-behind two methods on its ``Notifier``; ``build_alerts`` itself is pure. So rather than vendor
-twelve thousand lines, this imports the monitor from a configured path and hands
-``check_and_notify`` a sink of our own. Its toasts never happen; its alerts arrive in the box
-above the pony instead.
+The monitor lives in ``clop_monitor/`` beside this package. It is a standalone program that
+polls the game every 60 seconds and raises Windows toasts, and it still works that way if you
+run it directly. Everything platform-specific about it lives behind two methods on its
+``Notifier``; ``build_alerts`` itself is pure. So this hands ``check_and_notify`` a sink of our
+own: its toasts never happen, and its alerts arrive in the box above the pony instead.
 
 Its ``main()`` is bypassed entirely -- it is one undecomposed function that also owns argument
 parsing, credential prompting and the sheet sync. What is reused is the layer below:
 ``ClopClient``, ``build_alerts`` and ``check_and_notify``.
 
-Importing by path rather than vendoring means a moved or missing checkout is a real
-possibility, so every failure here is soft: the bridge logs, marks itself unavailable, and the
-pet runs on without CLOP features. A desktop companion that refuses to start because a
-sibling directory moved would be a bad trade.
+The monitor goes on ``sys.path`` as a directory rather than being imported as a package,
+because its modules import each other by bare name (``from goods import ...``). That is how it
+runs as a program, and rewriting every module and all seven of its test files into relative
+imports would buy nothing.
+
+Failures here are all soft: the bridge logs, marks itself unavailable, and the pet runs on
+without CLOP features. A desktop companion that refuses to start over a missing game monitor
+would be a bad trade.
 """
 
 from __future__ import annotations
@@ -48,8 +51,9 @@ def load_monitor(monitor_path: Path):
         path = (Path(__file__).resolve().parent.parent / path).resolve()
     if not (path / "clop_monitor.py").is_file():
         raise ClopUnavailable(
-            f"No clop_monitor.py under {path}. Point clop.monitor_path at your "
-            f"clop-alerts-windownotifs checkout, or set clop.enabled to false."
+            f"No clop_monitor.py under {path}. The bundled monitor should be at "
+            f"clop_monitor/ beside main.py; check clop.monitor_path, or set "
+            f"clop.enabled to false."
         )
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))

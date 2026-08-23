@@ -168,12 +168,17 @@ class DesktopPetConfig:
 class ClopConfig:
     """The 4CLOP monitor that runs inside this process.
 
-    ``monitor_path`` points at a clop-alerts-windownotifs checkout, which is imported rather
-    than vendored so it keeps its own test suite and its own standalone entry point. A path
-    that does not resolve is not fatal: CLOP features switch off and the pet runs on.
+    ``monitor_path`` points at the bundled ``clop_monitor/`` directory. It is vendored rather
+    than imported from a sibling checkout so this is one clone and one thing to run -- but it
+    is still a plain directory on ``sys.path`` rather than a package, because its modules
+    import each other by bare name and turning that into relative imports would mean rewriting
+    every module and all seven test files for no functional gain.
+
+    Point it elsewhere to run against a development checkout. A path that does not resolve is
+    not fatal: CLOP features switch off and the pet runs on.
     """
     enabled: bool = False
-    monitor_path: str = "../clop-alerts-windownotifs"
+    monitor_path: str = "clop_monitor"
     base_url: str = "https://4clop.org/"
     #: All default to the monitor checkout's own files when left unset.
     settings_file: Optional[str] = None
