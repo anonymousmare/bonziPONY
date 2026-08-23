@@ -296,6 +296,7 @@ def main() -> None:
     from desktop_pet.speech_bubble import SpeechBubble
     from desktop_pet.heard_text import HeardText
     from desktop_pet.countdown_timer import CountdownTimer
+    from desktop_pet.notification_box import NotificationBox
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -630,6 +631,9 @@ def main() -> None:
     countdown = CountdownTimer()
     countdown.set_anchor_widget(pet_window)
 
+    notification_box = NotificationBox()
+    notification_box.set_anchor_widget(pet_window)
+
     # ── Connect signals → slots ──────────────────────────────────────────────
 
     def _on_state_changed(state_name: str) -> None:
@@ -748,6 +752,8 @@ def main() -> None:
     pet_controller.drag_walk_stop.connect(pet_window.stop_drag_walk, Qt.QueuedConnection)
     pet_controller.countdown_start.connect(countdown.start_countdown, Qt.QueuedConnection)
     pet_controller.countdown_stop.connect(countdown.stop_countdown, Qt.QueuedConnection)
+    pet_controller.notification_received.connect(notification_box.push, Qt.QueuedConnection)
+    pet_controller.notifications_cleared.connect(notification_box.clear, Qt.QueuedConnection)
 
     # Wire cursor grab callback to agent loop (defined after both exist)
     # Also wire mouth position callback for tab-drag behavior
