@@ -763,6 +763,41 @@ def main() -> None:
         agent_loop._on_drag_walk_start = lambda: pet_controller.drag_walk_start.emit()
         agent_loop._on_drag_walk_stop = lambda: pet_controller.drag_walk_stop.emit()
 
+    # ── CLOP bridge ──────────────────────────────────────────────────────────
+    # The 4CLOP monitor's poll loop, running on a background thread in this process.
+    # Its alerts arrive in the notification box instead of as Windows toasts.
+    clop_bridge = None
+    clop_unread = None
+    clop_cfg = getattr(config, "clop", None)
+    if clop_cfg and clop_cfg.enabled:
+        from core.clop_bridge import ClopBridge
+        from core.clop_unread import UnreadStore
+
+        clop_unread = UnreadStore()
+
+        clop_bridge = ClopBridge(
+            clop_cfg,
+            on_notification=pet_controller.on_notification,
+            unread=clop_unread,
+        )
+        if clop_bridge.start():
+            # Anything still unread from a previous run goes back in the box, so a restart
+            # does not quietly swallow what nobody has read yet.
+            for _item in clop_unread.items:
+                pet_controller.on_notification(_item)
+            if agent_loop:
+                agent_loop.clop_unread = clop_unread
+                agent_loop.clop_bridge = clop_bridge
+            logger.info("CLOP bridge running — polling every %ds", clop_cfg.poll_interval_s)
+        else:
+            clop_bridge = None
+            logger.warning("CLOP bridge unavailable; continuing without CLOP features")
+
+    # Marking one read in the box is what marks it read in the store. The box is the only
+    # place that knows the user actually saw it.
+    if clop_unread is not None:
+        notification_box.dismissed.connect(clop_unread.mark_read)
+
     # ── Double-click activation ──────────────────────────────────────────────
 
     activation_event = threading.Event()
@@ -1001,6 +1036,8 @@ def main() -> None:
         logger.info("Shutdown signal received — cleaning up...")
         _shutdown_requested.set()
         pony_manager._shutting_down = True
+        if clop_bridge is not None:
+            clop_bridge.stop()
         # Stop TTS queue first to avoid audio playing during teardown
         tts_queue.stop()
         if screen_monitor:

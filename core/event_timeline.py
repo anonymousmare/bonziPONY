@@ -35,6 +35,12 @@ class EventType(Enum):
     USER_WENT_AFK = auto()
     USER_RETURNED = auto()
 
+    # CLOP events. NOTIFICATION_RELAYED is how she knows she has already mentioned
+    # something, and THREAD_CHECKED is how the next hourly check knows what she said
+    # last time -- without either she repeats herself.
+    NOTIFICATION_RELAYED = auto()
+    THREAD_CHECKED = auto()
+
 
 class ActivityState(Enum):
     ACTIVE_WORKING = "active_working"

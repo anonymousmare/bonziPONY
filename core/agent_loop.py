@@ -356,8 +356,13 @@ class AgentLoop:
         self._llm = llm
         self._tts = tts
         self._tts_config = tts_config  # for checking tts.enabled
-        self._tts_queue = None          # set by main.py for multi-pony voice routing
+        self._tts_queue = None          # set by main.py for voice routing
         self._primary_voice_slug = None # set by main.py
+        #: core.clop_unread.UnreadStore, set by main.py when the CLOP bridge is on.
+        #: Read by _welcome_back so she can say what arrived while the user was away.
+        self.clop_unread = None
+        #: core.clop_bridge.ClopBridge, set by main.py. Used by the hourly thread check.
+        self.clop_bridge = None
         self._desktop = desktop_controller
         self._robot = robot
         self._detector = detector
@@ -3728,6 +3733,21 @@ class AgentLoop:
 
             context = " ".join(context_parts)
 
+            # What the CLOP monitor said while they were gone. This is the whole point of
+            # the catch-up: the notification box holds the detail, but the box is silent, so
+            # the count is the only thing that reaches someone walking back to the desk.
+            clop_context = ""
+            clop_hint = ""
+            unread = self.clop_unread
+            if unread is not None and len(unread):
+                clop_context = "\n" + unread.describe_for_prompt()
+                clop_hint = (
+                    f" Lead with what they missed on CLOP: {unread.summary_line()}. "
+                    f"Say the counts out loud, then your own read on which of them "
+                    f"actually matters. Do not list every one -- pick what is worth "
+                    f"their attention. The details are already on screen in the box."
+                )
+
             # Build the welcome-back prompt — natural speech, not JSON
             close_tab_hint = ""
             if pony_opened_descriptions:
@@ -3738,12 +3758,12 @@ class AgentLoop:
 
             prompt = (
                 f"(The user just came back after being away for {dur}.{current_app}"
-                f"{pony_opened_note} {context}\n"
+                f"{pony_opened_note} {context}{clop_context}\n"
                 f"Welcome them back naturally as {name}. "
                 f"If you know WHY they left, reference it. "
                 f"Be casual — don't robotically state the exact duration. "
                 f"Don't be fake or over-enthusiastic. Just react like a real friend "
-                f"who noticed they were gone.{close_tab_hint}\n"
+                f"who noticed they were gone.{clop_hint}{close_tab_hint}\n"
                 f"You can include action tags: [ACTION:WAVE], [MOVETO:center], "
                 f"[DESKTOP:BROWSE:url], [DESKTOP:MESS_MOUSE], etc. "
                 f"Include [CONVO:CONTINUE] so they can respond.)"
@@ -3757,6 +3777,13 @@ class AgentLoop:
                 if text:
                     self._speak(text)
                     self._log_action(f"Welcome back after {dur}")
+                    if unread is not None and len(unread) and self._timeline:
+                        from core.event_timeline import EventType
+
+                        self._timeline.append(
+                            EventType.NOTIFICATION_RELAYED,
+                            f"Caught the user up on CLOP: {unread.summary_line()}",
+                        )
 
                 # Execute any parsed actions/commands from the response
                 self._execute_parsed_actions(parsed)

@@ -165,6 +165,32 @@ class DesktopPetConfig:
 
 
 @dataclass
+class ClopConfig:
+    """The 4CLOP monitor that runs inside this process.
+
+    ``monitor_path`` points at a clop-alerts-windownotifs checkout, which is imported rather
+    than vendored so it keeps its own test suite and its own standalone entry point. A path
+    that does not resolve is not fatal: CLOP features switch off and the pet runs on.
+    """
+    enabled: bool = False
+    monitor_path: str = "../clop-alerts-windownotifs"
+    base_url: str = "https://4clop.org/"
+    #: All default to the monitor checkout's own files when left unset.
+    settings_file: Optional[str] = None
+    env_file: Optional[str] = None
+    state_file: Optional[str] = None
+    poll_interval_s: int = 60
+    #: never | high | always. The box is silent by default: at a 60s poll, speaking every
+    #: alert would mean talking over the user all day. She still speaks the welcome-back
+    #: catch-up and her own unprompted remarks regardless of this.
+    speak_notifications: str = "never"
+    #: off | rare | on. How often she volunteers a read on the user's position.
+    strategy_thoughts: str = "rare"
+    #: How often she reads the configured 4chan thread, in hours. 0 disables it.
+    thread_check_hours: float = 1.0
+
+
+@dataclass
 class SafetyConfig:
     """Read-only / safety controls. When read_only_mode is True, the agent
     loop skips all invasive behaviors: AFK mischief, force-escalation
@@ -191,6 +217,7 @@ class AppConfig:
     tts: TTSConfig = None
     vision_llm: VisionLLMConfig = None
     safety: SafetyConfig = None
+    clop: ClopConfig = None
     auto_update: bool = False              # auto-pull git updates on launch (off by default)
     presentation_mode: bool = False        # secret: unlocks demo/presentation menu
 
@@ -209,6 +236,8 @@ class AppConfig:
             self.vision_llm = VisionLLMConfig()
         if self.safety is None:
             self.safety = SafetyConfig()
+        if self.clop is None:
+            self.clop = ClopConfig()
 
 
 def _parse_vision_llm(raw: dict | None) -> VisionLLMConfig | None:
@@ -264,6 +293,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
     tts_raw = raw.get("tts", {})
     vlm_raw = raw.get("vision_llm", {})
     safety_raw = raw.get("safety", {})
+    clop_raw = raw.get("clop", {})
     auto_update = bool(raw.get("auto_update", False))
     presentation_mode = raw.get("presentation_mode", False)
 
@@ -383,6 +413,18 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
         vision_llm=_parse_vision_llm(vlm_raw or None),
         safety=SafetyConfig(
             read_only_mode=bool(safety_raw.get("read_only_mode", False)),
+        ),
+        clop=ClopConfig(
+            enabled=bool(clop_raw.get("enabled", False)),
+            monitor_path=clop_raw.get("monitor_path", "../clop-alerts-windownotifs"),
+            base_url=clop_raw.get("base_url", "https://4clop.org/"),
+            settings_file=clop_raw.get("settings_file"),
+            env_file=clop_raw.get("env_file"),
+            state_file=clop_raw.get("state_file"),
+            poll_interval_s=int(clop_raw.get("poll_interval_s", 60)),
+            speak_notifications=str(clop_raw.get("speak_notifications", "never")),
+            strategy_thoughts=str(clop_raw.get("strategy_thoughts", "rare")),
+            thread_check_hours=float(clop_raw.get("thread_check_hours", 1.0)),
         ),
         auto_update=auto_update,
         presentation_mode=bool(presentation_mode),
