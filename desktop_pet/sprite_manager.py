@@ -91,6 +91,8 @@ class SpriteManager:
         (("fly",),                "fly"),
         (("hover",),             "hover"),
         (("sleep",),             "sleep"),
+        (("read",),              "read"),
+        (("windblown",),         "alert"),
         (("dizzy",),             "dizzy"),
         (("drag",),              "drag"),
         (("gallop", "dash", "zoom", "run"), "dash"),

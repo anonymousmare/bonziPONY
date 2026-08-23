@@ -1,0 +1,4086 @@
+{
+  "_meta": {
+    "generated_from": "clop/tables with data.sql",
+    "generator": "tools/export_gamedata.py",
+    "regenerate_with": "python3 tools/export_gamedata.py",
+    "warnings": [
+      "Every `description_prose_unverified` field is the game's own prose and is NOT reliable. Where prose and columns disagree, the columns are what the tick actually does. Three known contradictions are flagged inline with a `description_warning` field.",
+      "`satisfaction_on_build` (a one-time payout when you build) and `satisfaction_per_tick` (an ongoing effect) are stored in the same-named column of two different tables. They are not the same number and are not interchangeable.",
+      "`build_requires_owned` lists prerequisites that are checked but NOT consumed. Only `build_consumes` is spent.",
+      "`money_cost_przewalskia` is null where Przewalskia cannot build the thing at all. The raw table stores 0 there, which does not mean free.",
+      "Dropped orphan recipeitems rows for recipe_id(s) 39: they have cost rows but no matching recipe, so they are unbuildable dead data."
+    ],
+    "counts": {
+      "buildings": 48,
+      "goods": 31,
+      "actions": 14,
+      "weapons": 19,
+      "armor": 18
+    }
+  },
+  "buildings": [
+    {
+      "resource_id": 31,
+      "name": "Advanced Factory",
+      "description_prose_unverified": "This factory makes precision parts and composites.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Energy": 2
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 20000,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -5,
+      "pollution": {
+        "bad_min": 5,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 24,
+          "action_name": "Build Advanced Factory",
+          "money_cost": 750000,
+          "money_cost_przewalskia": 500000,
+          "build_consumes": {
+            "Energy": 50,
+            "Copper": 50,
+            "Vehicle Parts": 20,
+            "Machinery Parts": 20
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 20,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 50 copper, 50 energy, 20 machinery parts, and 20 vehicle parts, you make a factory that uses 2 energy per tick (and -1 satisfaction a tick) to generate 20k GDP and allows for the creation of precision parts and composites. Build more than 5 and the environmentalists get on your ass. However, it's a large enough achievement that you get 20 satisfaction for building it.",
+          "action_display_name": "Build Advanced Factory",
+          "group": "Factories"
+        }
+      ]
+    },
+    {
+      "resource_id": 76,
+      "name": "Alicornification Facility",
+      "description_prose_unverified": "You know what this does.",
+      "produces_per_tick": {
+        "Apotheosis Serum": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 50,
+        "Energy": 100
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [],
+      "no_recipe_note": "Has no recipes row. Created by the ascension flow in backend/backend_majoractions.php:128, not by a normal build action."
+    },
+    {
+      "resource_id": 12,
+      "name": "Bakery",
+      "description_prose_unverified": "Every turn, this bakery performs the vital task of turning 1 unit of energy and 2 of apples into 3 huge boxes of pies. It's also a great place to work.",
+      "produces_per_tick": {
+        "Pies": 3
+      },
+      "consumes_per_tick": {
+        "Apples": 2,
+        "Energy": 1
+      },
+      "satisfaction_per_tick": 1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -5,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 13,
+          "action_name": "Build Bakery",
+          "money_cost": 400000,
+          "money_cost_przewalskia": 200000,
+          "build_consumes": {
+            "Copper": 5,
+            "Vehicle Parts": 5,
+            "Machinery Parts": 5,
+            "Energy": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 2,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Far more efficient than distributing apples directly, the bakery uses 1 energy and 2 apples to make 3 boxes of pies and add 1 satisfaction every tick. Ponies become more satisfied by 2 just watching it be built. Needs 5 copper, 5 energy, 5 vehicle parts, and 5 machinery parts to build.",
+          "action_display_name": "Build Bakery",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 22,
+      "name": "Bar",
+      "description_prose_unverified": "Unlike bars for humans, this one serves pies with its cider. Uses 3 coffee and 1 pie a turn to provide your ponies with 10 satisfaction. No energy is required.",
+      "description_warning": "Its description says '3 coffee and 1 pie'. It actually consumes 3 Cider and 1 Pie.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Cider": 3,
+        "Pies": 1
+      },
+      "satisfaction_per_tick": 10,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -10,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 19,
+          "action_name": "Build Bar",
+          "money_cost": 150000,
+          "money_cost_przewalskia": 150000,
+          "build_consumes": {
+            "Copper": 40
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Use 40 copper to construct a bar that uses up 3 cider and 1 pie a tick to increase your ponies' satisfaction by 10. Raises satisfaction by 5 just being built.",
+          "action_display_name": "Build Bar",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 36,
+      "name": "Barracks",
+      "description_prose_unverified": "For 500 copper, 500 energy, 50 vehicle parts, and 50 machinery parts, you build a Barracks that increases your new forces' training by 1. More Barracks stack. However, building more than 1 Barracks very much worries your little ponies.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 10,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 29,
+          "action_name": "Build Barracks",
+          "money_cost": 4000000,
+          "money_cost_przewalskia": 4000000,
+          "build_consumes": {
+            "Copper": 500,
+            "Energy": 500,
+            "Vehicle Parts": 50,
+            "Machinery Parts": 50
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 4 million bits, 500 copper, 500 energy, 50 vehicle parts, and 50 machinery parts, you build a Barracks that increases your new forces' training by 1. More Barracks stack. However, building more than 1 Barracks causes environmental devastation- and you can't disable them.",
+          "action_display_name": "Build Barracks",
+          "group": "Military"
+        }
+      ]
+    },
+    {
+      "resource_id": 8,
+      "name": "Basic Apple Orchard",
+      "description_prose_unverified": "Growing apple according to the local climate, this Apple Orchard produces 5 units of raw apples every 2 hours. It uses nothing but pure horsepower, making it a backbreaking place to work for the local horses.",
+      "produces_per_tick": {
+        "Apples": 5
+      },
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": -2,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 1,
+      "pollution": {
+        "bad_min": 10,
+        "bad_div": 10,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 3,
+          "action_name": "Plow Basic Apple Orchard",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Plow a basic apple-growing orchard that uses only horsepower and no modern equipment for -2 sat and 5 apples a tick. Building more than 10 hurts the environment.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Plow Basic Apple Orchard",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 7,
+      "name": "Basic Copper Mine",
+      "description_prose_unverified": "A nasty and downright dangerous place to work, this mine provides 5 units of copper every 2 hours.",
+      "produces_per_tick": {
+        "Copper": 5
+      },
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": -2,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 1,
+      "pollution": {
+        "bad_min": 10,
+        "bad_div": 10,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 2,
+          "action_name": "Dig Basic Copper Mine",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Your zebras will toil underground in the dark with no mechanical help (-2 sat) to get 5 copper every tick. Building more than 10 hurts the environment.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Dig Basic Copper Mine",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 5,
+      "name": "Basic Factory",
+      "description_prose_unverified": "Little more than a series of primitive CNC machines and some aging control systems, this factory makes everything from basic gun parts to pieces of more advanced factories. It's not the greatest place to work (-1 sat/turn), but on the bright side, it turns one unit of energy into 10k money every 2 hours, depending on your economy type. Building more than 20 hurts the environment.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 10000,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 20,
+        "bad_div": 10,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 5,
+          "action_name": "Build Basic Factory",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 150000,
+          "build_consumes": {
+            "Energy": 12,
+            "Copper": 30
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Using 12 energy and 30 copper, build a basic factory that turns 1 unit of energy into 10k money, depending on your economy type, every tick. It's not the greatest place to work (-1 sat/tick), but owning this factory lets you make other things with it. If you build more than 20, overindustrialization starts hurting the environment.",
+          "action_display_name": "Build Basic Factory",
+          "group": "Factories"
+        },
+        {
+          "recipe_id": 60,
+          "action_name": "Receive Factory Aid",
+          "money_cost": 100000,
+          "money_cost_przewalskia": 100000,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "As part of an experimental joint development initiative, the Solar Empire and New Lunar Republic are building basic factories in new Przewalskian nations for only 100,000 bits. You can only receive one of these.",
+          "action_display_name": "Receive Factory Aid",
+          "group": "Factories"
+        }
+      ]
+    },
+    {
+      "resource_id": 6,
+      "name": "Basic Oil Well",
+      "description_prose_unverified": "Inefficient, dirty as hell, and a horrible place to work, this well provides 5 units of the black goo that runs the world every 2 hours.",
+      "produces_per_tick": {
+        "Oil": 5
+      },
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": -2,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 1,
+      "pollution": {
+        "bad_min": 10,
+        "bad_div": 10,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 1,
+          "action_name": "Build Basic Oil Well",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Saddle Arabia",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Tap into the thick, black crude made before the time of Eohippus. This primitive oil well is a dirty place to work (-2 sat/tick), but it provides the lifeblood of the world (5 oil/tick). Building more than 10 hurts the environment.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Saddle Arabia.",
+          "action_display_name": "Build Basic Oil Well",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 17,
+      "name": "Cider Production Facility",
+      "description_prose_unverified": "Ferment 5 apples a turn into 5 cider! Requires 15 copper, 5 vehicle parts, and 5 mechanical parts to build. Does nothing for satisfaction one way or another, as the ponies working there are high on their own supply.",
+      "produces_per_tick": {
+        "Cider": 5
+      },
+      "consumes_per_tick": {
+        "Apples": 5,
+        "Energy": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 16,
+          "action_name": "Build Cider Production Facility",
+          "money_cost": 300000,
+          "money_cost_przewalskia": 300000,
+          "build_consumes": {
+            "Copper": 15,
+            "Vehicle Parts": 5,
+            "Machinery Parts": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "With 1 energy and 5 apples a tick, you ferment 5 cider! Serve it in bars and fuel your state economy with it. Requires 15 copper, 5 vehicle parts, and 5 machinery parts to build. Does nothing for satisfaction one way or another, as the ponies working there are high on their own supply.",
+          "action_display_name": "Build Cider Production Facility",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 19,
+      "name": "Coffee Farm",
+      "description_prose_unverified": "As ponies have no hands, mechanical help is absolutely necessary to pick and transport these beans. Requires 10 vehicle parts and 5 mechanical parts to build. Uses 1 energy and costs 1 satisfaction.",
+      "produces_per_tick": {
+        "Coffee": 5
+      },
+      "consumes_per_tick": {
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 15,
+        "bad_div": 10,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 17,
+          "action_name": "Plow Coffee Farm",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Vehicle Parts": 10,
+            "Machinery Parts": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "As ponies have no hands, mechanical help is absolutely necessary to pick and transport these beans. For use in coffee shops and in free markets. Requires 10 vehicle parts and 5 machinery parts to build. Grants 5 coffee per tick. Uses 1 energy and costs 1 satisfaction per tick due to its difficulty. Building more than 15 causes environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Plow Coffee Farm",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 21,
+      "name": "Coffee Shop",
+      "description_prose_unverified": "This coffee shop uses 3 coffee and 1 pie a turn to provide your ponies with 10 satisfaction. No energy is required.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Coffee": 3,
+        "Pies": 1
+      },
+      "satisfaction_per_tick": 10,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -10,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 18,
+          "action_name": "Build Coffee Shop",
+          "money_cost": 150000,
+          "money_cost_przewalskia": 150000,
+          "build_consumes": {
+            "Copper": 40
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Use 40 copper to construct a coffee shop that uses up 3 coffee and 1 pie a tick to increase your ponies' satisfaction by 10. Raises satisfaction by 5 just being built.",
+          "action_display_name": "Build Coffee Shop",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 57,
+      "name": "DNA Extraction Facility - C. Burrozil",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Burrozilian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - Central Burrozil": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 52,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "Central",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Burrozilian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Build DNA Extraction Facility (Central Burrozil)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 60,
+      "name": "DNA Extraction Facility - C. Prze",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Przewalskian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - Central Przewalskia": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 55,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 500000,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "Central",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Przewalskian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "action_display_name": "Build DNA Extraction Facility (Central Przewalskia)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 51,
+      "name": "DNA Extraction Facility - C. SA",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Saddle Arabian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - Central Saddle Arabia": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 46,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Saddle Arabia",
+          "subregion": "Central",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Saddle Arabian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Saddle Arabia.",
+          "action_display_name": "Build DNA Extraction Facility (Central Saddle Arabia)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 54,
+      "name": "DNA Extraction Facility - C. Zebrica",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Zebrican region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - Central Zebrica": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 49,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "Central",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the Central Zebrican region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Build DNA Extraction Facility (Central Zebrica)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 56,
+      "name": "DNA Extraction Facility - N. Burrozil",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Burrozilian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - North Burrozil": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 51,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "North",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Burrozilian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Build DNA Extraction Facility (North Burrozil)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 59,
+      "name": "DNA Extraction Facility - N. Prze",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Przewalskian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - North Przewalskia": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 54,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 500000,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "North",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Przewalskian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "action_display_name": "Build DNA Extraction Facility (North Przewalskia)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 50,
+      "name": "DNA Extraction Facility - N. SA",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Saddle Arabian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - North Saddle Arabia": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 45,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Saddle Arabia",
+          "subregion": "North",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Saddle Arabian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Saddle Arabia.",
+          "action_display_name": "Build DNA Extraction Facility (North Saddle Arabia)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 53,
+      "name": "DNA Extraction Facility - N. Zebrica",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Zebrican region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - North Zebrica": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 48,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "North",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the North Zebrican region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Build DNA Extraction Facility (North Zebrica)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 58,
+      "name": "DNA Extraction Facility - S. Burrozil",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Burrozilian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - South Burrozil": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 53,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "South",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Burrozilian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Build DNA Extraction Facility (South Burrozil)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 61,
+      "name": "DNA Extraction Facility - S. Prze",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Przewalskian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - South Przewalskia": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 56,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 500000,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "South",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Przewalskian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "action_display_name": "Build DNA Extraction Facility (South Przewalskia)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 52,
+      "name": "DNA Extraction Facility - S. SA",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Saddle Arabian region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - South Saddle Arabia": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 47,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Saddle Arabia",
+          "subregion": "South",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Saddle Arabian region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Saddle Arabia.",
+          "action_display_name": "Build DNA Extraction Facility (South Saddle Arabia)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 55,
+      "name": "DNA Extraction Facility - S. Zebrica",
+      "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Zebrican region.\\nRequires no resources per turn.\\nBuilding more than one causes quadratic sat loss from environmental\\ndamage.",
+      "produces_per_tick": {
+        "DNA - South Zebrica": 1
+      },
+      "consumes_per_tick": {
+        "Apples": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 1,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 50,
+          "action_name": "Build DNA Extraction Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "South",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Extract DNA from the local ponies and wildlife of the South Zebrican region.\\nRequires 1 apple per tick and no resources to build, but building more than one\\ncauses geometric sat loss from environmental damage.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Build DNA Extraction Facility (South Zebrica)",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 41,
+      "name": "Drug Farm",
+      "description_prose_unverified": "For 200,000 bits and no resources, you plant a drug farm. It produces 10 drugs a turn that can be sold to the Solar Empire or New Lunar Republic for 20,000 bits each and a relationship hit of 1 with the nation that you sell them to. While it has no effect on satisfaction, its mere existence reduces your relationship with both the Solar Empire and New Lunar Republic by 1 a turn.",
+      "produces_per_tick": {
+        "Drugs": 10
+      },
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": -1,
+      "nlr_relation_per_tick": -1,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 36,
+          "action_name": "Drug Farm",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 200,000 bits and no resources, you plant a drug farm. It produces 10 drugs a tick that can be sold to the Solar Empire or New Lunar Republic for 20,000 bits each and a relationship hit of 1 with the nation that you sell them to. While it has no effect on satisfaction, its mere existence reduces your relationship with both the Solar Empire and New Lunar Republic by 1 a tick.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Drug Farm",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 74,
+      "name": "Forbidden Research Facility",
+      "description_prose_unverified": "Conduct forbidden research here.",
+      "produces_per_tick": {
+        "Forbidden Research": 1
+      },
+      "consumes_per_tick": {
+        "DNA - North Saddle Arabia": 20,
+        "DNA - Central Saddle Arabia": 20,
+        "DNA - South Saddle Arabia": 20,
+        "DNA - North Zebrica": 20,
+        "DNA - Central Zebrica": 20,
+        "DNA - South Zebrica": 20,
+        "DNA - North Burrozil": 20,
+        "DNA - Central Burrozil": 20,
+        "DNA - South Burrozil": 20,
+        "DNA - North Przewalskia": 20,
+        "DNA - Central Przewalskia": 20,
+        "DNA - South Przewalskia": 20
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": -15,
+      "nlr_relation_per_tick": -15,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 57,
+          "action_name": "Build Forbidden Research Facility",
+          "money_cost": 1000000000,
+          "money_cost_przewalskia": 1000000000,
+          "build_consumes": {
+            "Copper": 1000,
+            "Machinery Parts": 300,
+            "Precision Parts": 300
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Requires 1000 copper, 300 machinery parts, and 300 precision parts to build. Every turn, this facility requires 20 DNA from each of the dozen region and subregion combinations: a total of 240 DNA per tick. Reduces relationship with both the Solar Empire and New Lunar Republic by 15 a tick. Provides 1 Forbidden Research a tick. With 200 Forbidden Research... (Wait 1 tick after the research is complete.)",
+          "action_display_name": "Build Forbidden Research Facility",
+          "group": "Special"
+        }
+      ]
+    },
+    {
+      "resource_id": 24,
+      "name": "Gasoline Combustion Facility",
+      "description_prose_unverified": "This combustion facility burns oil to gasoline for no satisfaction loss.",
+      "produces_per_tick": {
+        "Energy": 12
+      },
+      "consumes_per_tick": {
+        "Gasoline": 8
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 21,
+          "action_name": "Upgrade to Gasoline Combustion Facility",
+          "money_cost": 200000,
+          "money_cost_przewalskia": 100000,
+          "build_consumes": {
+            "Oil Combustion Facility": 1,
+            "Copper": 30,
+            "Machinery Parts": 10
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "With 30 copper and 10 machinery parts, you transform one of your oil burning facilities into one that burns gasoline at the rate of 8 gasoline for 12 energy. You gain 5 sat for making the change. Gasoline burns much more cleanly than oil, so you lose no sat per tick from its use.",
+          "action_display_name": "Upgrade to Gasoline Combustion Facility",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 23,
+      "name": "Gasoline Refinery",
+      "description_prose_unverified": "This refinery turns oil into gasoline.",
+      "produces_per_tick": {
+        "Gasoline": 8
+      },
+      "consumes_per_tick": {
+        "Oil": 10
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 20,
+          "action_name": "Build Gasoline Refinery",
+          "money_cost": 300000,
+          "money_cost_przewalskia": 200000,
+          "build_consumes": {
+            "Copper": 75,
+            "Energy": 50,
+            "Machinery Parts": 20,
+            "Vehicle Parts": 10
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Every tick, you refine 10 oil into 8 gasoline. Costs 75 copper, 50 energy, 20 machinery parts, and 10 vehicle parts to build. No per-tick satisfaction loss, as the refining process takes away pollutants that would otherwise escape into the air.",
+          "action_display_name": "Build Gasoline Refinery",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 32,
+      "name": "Gem Mine",
+      "description_prose_unverified": "This mine has caffeinated ponies digging gems out of the ground.",
+      "produces_per_tick": {
+        "Gems": 3
+      },
+      "consumes_per_tick": {
+        "Coffee": 1,
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 7,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 22,
+          "action_name": "Dig Gem Mine",
+          "money_cost": 300000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Copper": 40,
+            "Machinery Parts": 15
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 300,000 bits, 40 copper, and 15 machinery parts, you dig a gem mine that creates 3 gems per tick. However, the ponies need coffee to turn their heads away from all the glitter. Uses up 1 coffee and 1 energy per tick. Costs 1 satisfaction per tick. Build more than 7, and environmental damage occurs.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Dig Gem Mine",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 45,
+      "name": "Lunar Environmental Facility",
+      "description_prose_unverified": "Through advanced technology and the aid of NLR unicorns, you use 500 copper, 100 machinery parts, and 100 composites to build a facility that reduces all environmental damage by 10% at the cost of 5 energy a turn. You must have at least 900 relationship with the New Lunar Republic to build this. You can only build 5 of these. Having 2 negates 19% environmental damage, not 20%.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Energy": 5
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 41,
+          "action_name": "Build Lunar Environmental Facility",
+          "money_cost": 20000000,
+          "money_cost_przewalskia": 20000000,
+          "build_consumes": {
+            "Copper": 500,
+            "Machinery Parts": 100,
+            "Composites": 100
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Through advanced technology and the help of NLR unicorns, you use 500 copper, 100 machinery parts, and 100 composites to build a facility that reduces all environmental damage by 10% at the cost of 5 energy a tick. You must have at least 900 relationship with the New Lunar Republic to build this. You can only build 5 of these. Having 2 negates 19% environmental damage, not 20%.",
+          "action_display_name": "Build Lunar Environmental Facility",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 49,
+      "name": "Mall",
+      "description_prose_unverified": "The Mall is the ultimate in satisfaction and revenue generation. It gives 400,000 (!) GDP and 50 satisfaction a turn. However, it requires 5 vehicle parts, 2 machinery parts, 5 toys, 5 coffee, 5 cider, 2 gems, 5 apples, 5 pies, 5 gasoline, and 10 energy a turn to operate. Remember, if you are missing enough of even one of these things, all your malls will fail to function. (Malls are serious business.)",
+      "description_warning": "Its resourcedef description claims 400,000 GDP. The gdp column says 250,000, and the build recipe's description agrees with the column.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Vehicle Parts": 5,
+        "Machinery Parts": 2,
+        "Toys": 5,
+        "Coffee": 5,
+        "Cider": 5,
+        "Gems": 2,
+        "Apples": 5,
+        "Pies": 5,
+        "Gasoline": 5,
+        "Energy": 10
+      },
+      "satisfaction_per_tick": 50,
+      "gdp_per_tick": 250000,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 44,
+          "action_name": "Build Mall",
+          "money_cost": 3000000,
+          "money_cost_przewalskia": 3000000,
+          "build_consumes": {
+            "Copper": 200,
+            "Vehicle Parts": 10,
+            "Machinery Parts": 10,
+            "Tungsten": 10
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 100,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "The Mall is the ultimate in satisfaction and revenue generation. It costs 200 copper, 10 vehicle parts, 10 machinery parts, and 10 tungsten to build, and it gives 250,000 (!) GDP and 50 satisfaction a tick. However, it requires 5 vehicle parts, 2 machinery parts, 5 toys, 5 coffee, 5 cider, 2 gems, 5 apples, 5 pies, 5 gasoline, and 10 energy a tick to operate. Remember, if you are missing enough of even one of these things, all your malls will fail to function. (Malls are serious business.) Raises satisfaction by 100 just being built- although if you're at the level where you can build this, you probably don't care.",
+          "action_display_name": "Build Mall",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 16,
+      "name": "Mechanized Apple Orchard",
+      "description_prose_unverified": "Say what you want about the earth pony way, but industrial agriculture definitely beats having to grow the stuff yourself. -1 energy and -1 sat for 8 apples every turn.",
+      "produces_per_tick": {
+        "Apples": 8
+      },
+      "consumes_per_tick": {
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 20,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 12,
+          "action_name": "Upgrade Apple Orchard",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Basic Apple Orchard": 1,
+            "Vehicle Parts": 20,
+            "Machinery Parts": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Burrozil",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "With 20 vehicle parts and 5 machinery parts, you make your Apple Orchard an easier and more efficient place to work at the cost of regular energy use. (+5 immediate sat; -1 sat, -1 energy, 8 apples per tick) Building more than 20 starts wreaking havoc with the environment.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Burrozil.",
+          "action_display_name": "Upgrade Apple Orchard",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 15,
+      "name": "Mechanized Copper Mine",
+      "description_prose_unverified": "Machinery and automated minecarts make a lot of difference to a mine, both for the mine's overall efficiency (-1 energy for 8 copper per turn) and the zebras who work there (-1 sat).",
+      "produces_per_tick": {
+        "Copper": 8
+      },
+      "consumes_per_tick": {
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 20,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 11,
+          "action_name": "Upgrade Copper Mine",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Basic Copper Mine": 1,
+            "Copper": 20,
+            "Vehicle Parts": 5,
+            "Machinery Parts": 10
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "With 20 copper, 5 vehicle parts, and 10 machinery parts, you make your copper mine an easier and more efficient place to work at the cost of regular energy use. (+5 immediate sat; -1 sat, -1 energy, 8 copper per tick) Building more than 20 starts wreaking havoc with the environment.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Upgrade Copper Mine",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 14,
+      "name": "Mechanized Oil Well",
+      "description_prose_unverified": "This oil well uses machinery and vehicles to more efficiently extract oil (8 per turn) and make life easier on the Saddle Arabians who work there (-1 sat). It requires 1 energy every turn, but you should have plenty of that.",
+      "produces_per_tick": {
+        "Oil": 8
+      },
+      "consumes_per_tick": {
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 20,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 10,
+          "action_name": "Upgrade Oil Well",
+          "money_cost": 200000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Basic Oil Well": 1,
+            "Copper": 5,
+            "Vehicle Parts": 7,
+            "Machinery Parts": 15
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Saddle Arabia",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "With 5 copper, 7 vehicle parts, and 15 machinery parts, you make an oil well an easier and more efficient place to work at the cost of regular energy use. (+5 immediate sat; -1 sat, -1 energy, 8 oil per tick) Building more than 20 starts wreaking havoc with the environment.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Saddle Arabia.",
+          "action_display_name": "Upgrade Oil Well",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 40,
+      "name": "Moon Worship Center",
+      "description_prose_unverified": "For 50 copper and 20 plastics, you build a moon worship center that uses 2 cider and 6 energy to raise your relationship with the New Lunar Republic by 1 every turn.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Cider": 2,
+        "Energy": 6
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 1,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 35,
+          "action_name": "Build Moon Worship Center",
+          "money_cost": 300000,
+          "money_cost_przewalskia": 300000,
+          "build_consumes": {
+            "Copper": 50,
+            "Plastics": 20
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 50 copper and 20 plastics, you build a moon worship center that uses 2 cider and 6 energy to raise your relationship with the New Lunar Republic by 1 every tick.",
+          "action_display_name": "Build Moon Worship Center",
+          "group": "Superpower Relations"
+        }
+      ]
+    },
+    {
+      "resource_id": 11,
+      "name": "Oil Combustion Facility",
+      "description_prose_unverified": "Much more efficient and less polluting than burning oil by hand, the Oil Combustion Facility yields 12 energy out of 8 oil every 2 hours. (If you have less than 8 oil, it simply does nothing.)",
+      "produces_per_tick": {
+        "Energy": 12
+      },
+      "consumes_per_tick": {
+        "Oil": 8
+      },
+      "satisfaction_per_tick": -2,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 5,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 14,
+          "action_name": "Build Oil Combustion Facility",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 250000,
+          "build_consumes": {
+            "Copper": 10,
+            "Machinery Parts": 20
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 10 copper and 20 machinery parts, you build the Oil Combustion Facility, which turns 8 oil into 12 energy every tick at the cost of 2 satisfaction. Building more than 5 starts creating air pollution.",
+          "action_display_name": "Build Oil Combustion Facility",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 35,
+      "name": "Oil Fracker",
+      "description_prose_unverified": "This facility digs deep into the ground to frack oil.",
+      "produces_per_tick": {
+        "Oil": 20
+      },
+      "consumes_per_tick": {
+        "Energy": 2
+      },
+      "satisfaction_per_tick": -2,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 5,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 25,
+          "action_name": "Build Oil Fracker",
+          "money_cost": 500000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Composites": 5,
+            "Copper": 75,
+            "Vehicle Parts": 15,
+            "Machinery Parts": 10
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Saddle Arabia",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "The oil fracker is a tremendous machine that reaches deep into the earth to get 20 oil per tick. Costs 75 copper, 15 vehicle parts, 10 machinery parts, and 5 composites to build. Uses up 2 energy per tick and costs 2 satisfaction a tick. Building more than 5 makes your ponies go up in forelegs about fracking.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Saddle Arabia.",
+          "action_display_name": "Build Oil Fracker",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 34,
+      "name": "Plastics Factory",
+      "description_prose_unverified": "This facility makes plastics out of oil.",
+      "produces_per_tick": {
+        "Plastics": 4
+      },
+      "consumes_per_tick": {
+        "Energy": 1,
+        "Oil": 4
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 7,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 28,
+          "action_name": "Build Plastics Factory",
+          "money_cost": 200000,
+          "money_cost_przewalskia": 200000,
+          "build_consumes": {
+            "Vehicle Parts": 15,
+            "Machinery Parts": 20,
+            "Precision Parts": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 1 energy and -1 satisfaction a tick, you turn 4 oil into 4 plastics. Requires 5 precision parts, 15 vehicle parts, and 20 machinery parts to build. Build more than 7 and the fumes become an environmental problem.",
+          "action_display_name": "Build Plastics Factory",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 80,
+      "name": "Przewalskian Plastics Factory",
+      "description_prose_unverified": "This factory produces plastics more efficiently.",
+      "produces_per_tick": {
+        "Plastics": 5
+      },
+      "consumes_per_tick": {
+        "Oil": 4,
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 1,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 61,
+          "action_name": "Upgrade Plastics Factory",
+          "money_cost": 1000000,
+          "money_cost_przewalskia": 1000000,
+          "build_consumes": {
+            "Plastics Factory": 1,
+            "Machinery Parts": 20,
+            "Precision Parts": 5,
+            "Composites": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "Any",
+          "satisfaction_on_build": 10,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 20 machinery parts, 5 precision parts, and 5 composites, you upgrade one of your plastics factories to a more efficient model available only in Przewalskia. This model produces 5 plastics per tick with 4 oil and 1 energy. Environmental penalties slowly accrue after each one converted beyond the first, but if you're advanced enough to build this, you've already figured out why it's a good idea...",
+          "action_display_name": "Upgrade Plastics Factory",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 78,
+      "name": "Solar Collector",
+      "description_prose_unverified": "This solar collector provides 1 energy a turn to Przewalskians.",
+      "produces_per_tick": {
+        "Energy": 1
+      },
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 58,
+          "action_name": "Build Solar Collector",
+          "money_cost": 100000,
+          "money_cost_przewalskia": 100000,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For a token payment of 100,000 bits, the Solar Empire will build a Solar Collector on your Przewalskian steppes. Generates 1 energy a tick at no cost. You can only have two of these. You still lose sat for not having any buildings if you only have these.",
+          "action_display_name": "Build Solar Collector",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 44,
+      "name": "Solar Environmental Facility",
+      "description_prose_unverified": "Through advanced technology and solar magic, you use 500 copper, 100 machinery parts, and 100 composites to build a facility that reduces all environmental damage by 10% at the cost of 5 energy a turn. You must have at least 900 relationship with the Solar Empire to build this. You can only build 5 of these. Having 2 negates 19% environmental damage, not 20%.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Energy": 5
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 40,
+          "action_name": "Build Solar Environmental Facility",
+          "money_cost": 20000000,
+          "money_cost_przewalskia": 20000000,
+          "build_consumes": {
+            "Copper": 500,
+            "Machinery Parts": 100,
+            "Composites": 100
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Through advanced technology and solar magic, you use 500 copper, 100 machinery parts, and 100 composites to build a facility that reduces all environmental damage by 10% at the cost of 5 energy a tick. You must have at least 900 relationship with the Solar Empire to build this. You can only build 5 of these. Having 2 negates 19% environmental damage, not 20%.",
+          "action_display_name": "Build Solar Environmental Facility",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 38,
+      "name": "Statue",
+      "description_prose_unverified": "Use 20,000 copper to build a huge statue to inspire your ponies and provide 1 satisfaction a turn. Requires no constant inputs.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": 1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -50,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 31,
+          "action_name": "Build Statue",
+          "money_cost": 5000000,
+          "money_cost_przewalskia": 5000000,
+          "build_consumes": {
+            "Copper": 20000
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 50,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "Use 20,000 copper to build a huge statue to inspire your ponies and provide 1 satisfaction a tick. Requires no per-tick inputs. Gives 50 satisfaction being built.",
+          "action_display_name": "Build Statue",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 39,
+      "name": "Sun Worship Center",
+      "description_prose_unverified": "For 50 copper and 20 plastics, you build a sun worship center that uses 2 coffee and 6 energy to raise your relationship with the Solar Empire by 1 every turn.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Coffee": 2,
+        "Energy": 6
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 1,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 34,
+          "action_name": "Build Sun Worship Center",
+          "money_cost": 300000,
+          "money_cost_przewalskia": 300000,
+          "build_consumes": {
+            "Copper": 50,
+            "Plastics": 20
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 50 copper and 20 plastics, you build a sun worship center that uses 2 coffee and 6 energy to raise your relationship with the Solar Empire by 1 every tick.",
+          "action_display_name": "Build Sun Worship Center",
+          "group": "Superpower Relations"
+        }
+      ]
+    },
+    {
+      "resource_id": 79,
+      "name": "Tidal Generator",
+      "description_prose_unverified": "This tidal generator provides 1 energy a turn to Przewalskians.",
+      "produces_per_tick": {
+        "Energy": 1
+      },
+      "consumes_per_tick": {},
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 59,
+          "action_name": "Build Tidal Generator",
+          "money_cost": 100000,
+          "money_cost_przewalskia": 100000,
+          "build_consumes": {},
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Przewalskia",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For a token payment of 100,000 bits, the New Lunar Republic will build a Tidal Generator on your Przewalskian coast. Generates 1 energy a tick at no cost. You can only have two of these. You still lose sat for not having any buildings if you only have these.",
+          "action_display_name": "Build Tidal Generator",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 46,
+      "name": "Toy Factory",
+      "description_prose_unverified": "With 100 copper, 5 machinery, and 5 precision parts, you build a Toy Factory that turns 1 plastic and 1 energy into 3 toys a turn.",
+      "produces_per_tick": {
+        "Toys": 3
+      },
+      "consumes_per_tick": {
+        "Energy": 1,
+        "Plastics": 1
+      },
+      "satisfaction_per_tick": 0,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 42,
+          "action_name": "Build Toy Factory",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 250000,
+          "build_consumes": {
+            "Copper": 100,
+            "Machinery Parts": 5,
+            "Precision Parts": 5
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "With 100 copper, 5 machinery, and 5 precision parts, you build a Toy Factory that turns 1 plastic and 1 energy into 3 toys a tick.",
+          "action_display_name": "Build Toy Factory",
+          "group": "Resource Conversion"
+        }
+      ]
+    },
+    {
+      "resource_id": 48,
+      "name": "Toy and Candy Shop",
+      "description_prose_unverified": "For 50 copper, you build a toy and candy shop that gives your ponies 30 satisfaction a turn at the price of 4 apples, 4 pies, and 4 toys. Raises satisfaction by 10 just being built. Really, what kind of adults buy toys?",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Apples": 4,
+        "Pies": 4,
+        "Toys": 4
+      },
+      "satisfaction_per_tick": 30,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -20,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 43,
+          "action_name": "Build Toy and Candy Shop",
+          "money_cost": 400000,
+          "money_cost_przewalskia": 400000,
+          "build_consumes": {
+            "Copper": 50
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 10,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 50 copper, you build a toy and candy shop that gives your ponies 30 satisfaction a tick at the price of 4 apples, 4 pies, and 4 toys. Raises satisfaction by 10 just being built. Really, what kind of adults buy toys?",
+          "action_display_name": "Build Toy and Candy Shop",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    },
+    {
+      "resource_id": 33,
+      "name": "Tungsten Mine",
+      "description_prose_unverified": "This mine has drunken ponies digging up tungsten.",
+      "produces_per_tick": {
+        "Tungsten": 4
+      },
+      "consumes_per_tick": {
+        "Cider": 1,
+        "Energy": 1
+      },
+      "satisfaction_per_tick": -1,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": 0,
+      "pollution": {
+        "bad_min": 7,
+        "bad_div": 5,
+        "pollutes": true,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 23,
+          "action_name": "Dig Tungsten Mine",
+          "money_cost": 300000,
+          "money_cost_przewalskia": null,
+          "build_consumes": {
+            "Precision Parts": 3,
+            "Vehicle Parts": 10,
+            "Machinery Parts": 10
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Zebrica",
+          "subregion": "Any",
+          "satisfaction_on_build": 0,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 300,000 bits, 3 precision parts, 10 vehicle parts, and 10 machinery parts, you dig a tungsten mine that creates 4 tungsten per tick. However, the poisons in the mine can only be neutralized with alcohol. Uses up 1 cider and 1 energy per tick. Costs 1 satisfaction per turn. Build more than 7, and environmental damage occurs.",
+          "przewalskia_note": "Przewalskia cannot build this at all -- it is locked to Zebrica.",
+          "action_display_name": "Dig Tungsten Mine",
+          "group": "Resource Extraction"
+        }
+      ]
+    },
+    {
+      "resource_id": 37,
+      "name": "Video Arcade",
+      "description_prose_unverified": "For 50 copper and 50 energy, you build a video arcade that uses 6 energy and 1 pie a turn to yield 10 satisfaction.",
+      "description_warning": "Its resourcedef description says 6 energy. It actually consumes 5, and the build recipe's description agrees with the column.",
+      "produces_per_tick": {},
+      "consumes_per_tick": {
+        "Energy": 5,
+        "Pies": 1
+      },
+      "satisfaction_per_tick": 10,
+      "gdp_per_tick": 0,
+      "se_relation_per_tick": 0,
+      "nlr_relation_per_tick": 0,
+      "satisfaction_on_destroy": -5,
+      "pollution": {
+        "bad_min": 0,
+        "bad_div": 0,
+        "pollutes": false,
+        "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)"
+      },
+      "built_by": [
+        {
+          "recipe_id": 30,
+          "action_name": "Build Video Arcade",
+          "money_cost": 500000,
+          "money_cost_przewalskia": 500000,
+          "build_consumes": {
+            "Energy": 50,
+            "Copper": 50
+          },
+          "build_requires_owned": {},
+          "produces_amount": 1,
+          "region": "Any",
+          "subregion": "Any",
+          "satisfaction_on_build": 5,
+          "se_relation_on_build": 0,
+          "nlr_relation_on_build": 0,
+          "secret": false,
+          "description_prose_unverified": "For 50 copper and 50 energy, you build a video arcade that uses 5 energy and 1 pie a tick to yield 10 satisfaction. Gives 5 satisfaction just being built.",
+          "action_display_name": "Build Video Arcade",
+          "group": "Satisfaction Buildings"
+        }
+      ]
+    }
+  ],
+  "goods": [
+    {
+      "resource_id": 77,
+      "name": "Apotheosis Serum",
+      "description_prose_unverified": "You know what this is for.",
+      "tradeable": false,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Alicornification Facility"
+      ],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 3,
+      "name": "Apples",
+      "description_prose_unverified": "A pony without apples is an unhappy pony. Unhappy ponies will overthrow you and trot on your corpse. Keep your ponies happy. Give them apples.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Basic Apple Orchard",
+        "Mechanized Apple Orchard"
+      ],
+      "consumed_by": [
+        "Alicornification Facility",
+        "Bakery",
+        "Cider Production Facility",
+        "DNA Extraction Facility - C. Burrozil",
+        "DNA Extraction Facility - C. Prze",
+        "DNA Extraction Facility - C. SA",
+        "DNA Extraction Facility - C. Zebrica",
+        "DNA Extraction Facility - N. Burrozil",
+        "DNA Extraction Facility - N. Prze",
+        "DNA Extraction Facility - N. SA",
+        "DNA Extraction Facility - N. Zebrica",
+        "DNA Extraction Facility - S. Burrozil",
+        "DNA Extraction Facility - S. Prze",
+        "DNA Extraction Facility - S. SA",
+        "DNA Extraction Facility - S. Zebrica",
+        "Mall",
+        "Toy and Candy Shop"
+      ]
+    },
+    {
+      "resource_id": 18,
+      "name": "Cider",
+      "description_prose_unverified": "Serve it in bars or fuel your communists with it.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Cider Production Facility"
+      ],
+      "consumed_by": [
+        "Bar",
+        "Mall",
+        "Moon Worship Center",
+        "Tungsten Mine"
+      ]
+    },
+    {
+      "resource_id": 20,
+      "name": "Coffee",
+      "description_prose_unverified": "Serve it in coffee shops or feed your capitalists with it.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Coffee Farm"
+      ],
+      "consumed_by": [
+        "Coffee Shop",
+        "Gem Mine",
+        "Mall",
+        "Sun Worship Center"
+      ]
+    },
+    {
+      "resource_id": 30,
+      "name": "Composites",
+      "description_prose_unverified": "These composites are useful in fracking and tank armor.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 2,
+      "name": "Copper",
+      "description_prose_unverified": "It's a good thing that copper is so common, because it's fundamental to the manufacture of every technological component.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Basic Copper Mine",
+        "Mechanized Copper Mine"
+      ],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 69,
+      "name": "DNA - Central Burrozil",
+      "description_prose_unverified": "DNA from the Central Burrozilian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - C. Burrozil"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 72,
+      "name": "DNA - Central Przewalskia",
+      "description_prose_unverified": "DNA from the Central Przewalskian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - C. Prze"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 63,
+      "name": "DNA - Central Saddle Arabia",
+      "description_prose_unverified": "DNA from the Central Saddle Arabian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - C. SA"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 66,
+      "name": "DNA - Central Zebrica",
+      "description_prose_unverified": "DNA from the Central Zebrican region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - C. Zebrica"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 68,
+      "name": "DNA - North Burrozil",
+      "description_prose_unverified": "DNA from the North Burrozilian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - N. Burrozil"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 71,
+      "name": "DNA - North Przewalskia",
+      "description_prose_unverified": "DNA from the North Przewalskian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - N. Prze"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 62,
+      "name": "DNA - North Saddle Arabia",
+      "description_prose_unverified": "DNA from the North Saddle Arabian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - N. SA"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 65,
+      "name": "DNA - North Zebrica",
+      "description_prose_unverified": "DNA from the North Zebrican region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - N. Zebrica"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 70,
+      "name": "DNA - South Burrozil",
+      "description_prose_unverified": "DNA from the South Burrozilian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - S. Burrozil"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 73,
+      "name": "DNA - South Przewalskia",
+      "description_prose_unverified": "DNA from the South Przewalskian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - S. Prze"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 64,
+      "name": "DNA - South Saddle Arabia",
+      "description_prose_unverified": "DNA from the South Saddle Arabian region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - S. SA"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 67,
+      "name": "DNA - South Zebrica",
+      "description_prose_unverified": "DNA from the South Zebrican region.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "DNA Extraction Facility - S. Zebrica"
+      ],
+      "consumed_by": [
+        "Forbidden Research Facility"
+      ]
+    },
+    {
+      "resource_id": 42,
+      "name": "Drugs",
+      "description_prose_unverified": "Sell these drugs to the Solar Empire or New Lunar Republic to get 20,000 bits at the cost of 1 relationship.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Drug Farm"
+      ],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 4,
+      "name": "Energy",
+      "description_prose_unverified": "Batteries, watts, juice- call it what you want, you need more of this, whether you burn oil for it or not.",
+      "tradeable": false,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Gasoline Combustion Facility",
+        "Oil Combustion Facility",
+        "Solar Collector",
+        "Tidal Generator"
+      ],
+      "consumed_by": [
+        "Advanced Factory",
+        "Alicornification Facility",
+        "Bakery",
+        "Basic Factory",
+        "Cider Production Facility",
+        "Coffee Farm",
+        "Gem Mine",
+        "Lunar Environmental Facility",
+        "Mall",
+        "Mechanized Apple Orchard",
+        "Mechanized Copper Mine",
+        "Mechanized Oil Well",
+        "Moon Worship Center",
+        "Oil Fracker",
+        "Plastics Factory",
+        "Przewalskian Plastics Factory",
+        "Solar Environmental Facility",
+        "Sun Worship Center",
+        "Toy Factory",
+        "Tungsten Mine",
+        "Video Arcade"
+      ]
+    },
+    {
+      "resource_id": 75,
+      "name": "Forbidden Research",
+      "description_prose_unverified": "This research has been forbidden.",
+      "tradeable": false,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Forbidden Research Facility"
+      ],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 25,
+      "name": "Gasoline",
+      "description_prose_unverified": "This refined product of oil fuels government types and buildings.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Gasoline Refinery"
+      ],
+      "consumed_by": [
+        "Gasoline Combustion Facility",
+        "Mall"
+      ]
+    },
+    {
+      "resource_id": 26,
+      "name": "Gems",
+      "description_prose_unverified": "These little crystals are useful in the manufacturing of precision parts.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Gem Mine"
+      ],
+      "consumed_by": [
+        "Mall"
+      ]
+    },
+    {
+      "resource_id": 10,
+      "name": "Machinery Parts",
+      "description_prose_unverified": "These machinery parts are used in the manufacture of advanced structures.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [],
+      "consumed_by": [
+        "Mall"
+      ]
+    },
+    {
+      "resource_id": 1,
+      "name": "Oil",
+      "description_prose_unverified": "The stuff of life and the backbone of the &gt;CLOP economy.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Basic Oil Well",
+        "Mechanized Oil Well",
+        "Oil Fracker"
+      ],
+      "consumed_by": [
+        "Gasoline Refinery",
+        "Oil Combustion Facility",
+        "Plastics Factory",
+        "Przewalskian Plastics Factory"
+      ]
+    },
+    {
+      "resource_id": 13,
+      "name": "Pies",
+      "description_prose_unverified": "Distributing these baked treats brings your little ponies' happiness up quickly.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Bakery"
+      ],
+      "consumed_by": [
+        "Bar",
+        "Coffee Shop",
+        "Mall",
+        "Toy and Candy Shop",
+        "Video Arcade"
+      ]
+    },
+    {
+      "resource_id": 28,
+      "name": "Plastics",
+      "description_prose_unverified": "Plastics, derived from oil, are useful in the creation of composites.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Plastics Factory",
+        "Przewalskian Plastics Factory"
+      ],
+      "consumed_by": [
+        "Toy Factory"
+      ]
+    },
+    {
+      "resource_id": 29,
+      "name": "Precision Parts",
+      "description_prose_unverified": "These extremely precise parts are useful for unicorns and in tungsten mining.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 47,
+      "name": "Toys",
+      "description_prose_unverified": "These little bits of plastic are used for selling to those who collect such things. But what kind of adult does that?",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Toy Factory"
+      ],
+      "consumed_by": [
+        "Mall",
+        "Toy and Candy Shop"
+      ]
+    },
+    {
+      "resource_id": 27,
+      "name": "Tungsten",
+      "description_prose_unverified": "This tough substance is useful in the construction of alloys and composites.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [
+        "Tungsten Mine"
+      ],
+      "consumed_by": []
+    },
+    {
+      "resource_id": 9,
+      "name": "Vehicle Parts",
+      "description_prose_unverified": "These vehicle parts have many uses, first among them being to make life easier on ponies who work in farms, mines, and oil wells, turning a nasty job into a slightly less nasty one.",
+      "tradeable": true,
+      "satisfaction_per_tick_per_unit": 0,
+      "produced_by": [],
+      "consumed_by": [
+        "Mall"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "recipe_id": 4,
+      "action_name": "Burn Oil",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Oil": 5
+      },
+      "build_requires_owned": {},
+      "produces_amount": 5,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": -5,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Burn 5 units of oil in inefficient, hand-me-down generators in a wasteful process that severely pollutes the air (-5 sat) and only yields 5 units of energy.",
+      "action_display_name": "Burn Oil",
+      "group": "Basic Actions",
+      "produces": "Energy"
+    },
+    {
+      "recipe_id": 6,
+      "action_name": "Build Vehicle Parts",
+      "money_cost": 20000,
+      "money_cost_przewalskia": 200,
+      "build_consumes": {
+        "Copper": 1,
+        "Energy": 1
+      },
+      "build_requires_owned": {
+        "Basic Factory": 1
+      },
+      "produces_amount": 1,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Have your factory workers turn 1 energy and 1 copper into 1 box of vehicle parts suitable for export.",
+      "build_requires_owned_note": "These are prerequisites that must be OWNED. They are checked but NOT consumed by the build.",
+      "action_display_name": "Build Vehicle Parts",
+      "group": "Manufacturing",
+      "produces": "Vehicle Parts"
+    },
+    {
+      "recipe_id": 7,
+      "action_name": "Build Machinery",
+      "money_cost": 30000,
+      "money_cost_przewalskia": 300,
+      "build_consumes": {
+        "Copper": 1,
+        "Energy": 1
+      },
+      "build_requires_owned": {
+        "Basic Factory": 1
+      },
+      "produces_amount": 1,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Have your factory workers use 1 energy and 1 copper to create 1 box of mechanical parts useful in the construction of more advanced buildings.",
+      "build_requires_owned_note": "These are prerequisites that must be OWNED. They are checked but NOT consumed by the build.",
+      "action_display_name": "Build Machinery",
+      "group": "Manufacturing",
+      "produces": "Machinery Parts"
+    },
+    {
+      "recipe_id": 8,
+      "action_name": "Distribute Apples",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Apples": 5
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 3,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Distributing apples to your little ponies is highly inefficient, but at least it gets the job done. Distribute 5 apples for 3 satisfaction.",
+      "action_display_name": "Distribute Apples",
+      "group": "Basic Actions",
+      "produces": null
+    },
+    {
+      "recipe_id": 9,
+      "action_name": "Distribute Pies",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Pies": 1
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 2,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Distribute 1 large box of pies to your little ponies to raise their satisfaction by 2.",
+      "action_display_name": "Distribute Pies",
+      "group": "Basic Actions",
+      "produces": null
+    },
+    {
+      "recipe_id": 15,
+      "action_name": "Distribute Money",
+      "money_cost": 100000,
+      "money_cost_przewalskia": 100000,
+      "build_consumes": {},
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 1,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Spend 100,000 bits to get a measly 1 satisfaction. This is probably the worst use of money possible and won't work in the long run, but if you're desperately trying to stave off losing your country...",
+      "action_display_name": "Distribute Money",
+      "group": "Basic Actions",
+      "produces": null
+    },
+    {
+      "recipe_id": 26,
+      "action_name": "Manufacture Precision Parts",
+      "money_cost": 40000,
+      "money_cost_przewalskia": 400,
+      "build_consumes": {
+        "Copper": 1,
+        "Gems": 1
+      },
+      "build_requires_owned": {
+        "Advanced Factory": 1
+      },
+      "produces_amount": 1,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Using 1 gem and 1 copper, you manufacture 1 precision parts useful in the construction of tungsten mines and certain weapons.",
+      "build_requires_owned_note": "These are prerequisites that must be OWNED. They are checked but NOT consumed by the build.",
+      "action_display_name": "Manufacture Precision Parts",
+      "group": "Manufacturing",
+      "produces": "Precision Parts"
+    },
+    {
+      "recipe_id": 27,
+      "action_name": "Manufacture Composites",
+      "money_cost": 40000,
+      "money_cost_przewalskia": 400,
+      "build_consumes": {
+        "Tungsten": 1,
+        "Plastics": 1
+      },
+      "build_requires_owned": {
+        "Advanced Factory": 1
+      },
+      "produces_amount": 1,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Using 1 tungsten and 1 plastics, you manufacture 1 composites useful in the construction of oil frackers and certain armor.",
+      "build_requires_owned_note": "These are prerequisites that must be OWNED. They are checked but NOT consumed by the build.",
+      "action_display_name": "Manufacture Composites",
+      "group": "Manufacturing",
+      "produces": "Composites"
+    },
+    {
+      "recipe_id": 32,
+      "action_name": "Ship Oil to the Solar Empire",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Oil": 8
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 1,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Send 8 oil to the Solar Empire to better your relationship with it by 1.",
+      "action_display_name": "Ship Oil to the Solar Empire",
+      "group": "Superpower Relations",
+      "produces": null
+    },
+    {
+      "recipe_id": 33,
+      "action_name": "Ship Oil to the New Lunar Republic",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Oil": 8
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 1,
+      "secret": false,
+      "description_prose_unverified": "Send 8 oil to the New Lunar Republic to better your relationship with it by 1.",
+      "action_display_name": "Ship Oil to the New Lunar Republic",
+      "group": "Superpower Relations",
+      "produces": null
+    },
+    {
+      "recipe_id": 37,
+      "action_name": "Smuggle Drugs into the SE",
+      "money_cost": -20000,
+      "money_cost_przewalskia": -20000,
+      "build_consumes": {
+        "Drugs": 1
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": -1,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Smuggle drugs into the Solar Empire to gain 20,000 bits. You will lose 1 relationship with the Solar Empire for doing this (but that might be why you did...) You cannot do this if your relationship with the Solar Empire is below -500 or if your nation is younger than a week.",
+      "action_display_name": "Smuggle Drugs into the SE",
+      "group": "Superpower Relations",
+      "produces": null
+    },
+    {
+      "recipe_id": 38,
+      "action_name": "Smuggle Drugs into the NLR",
+      "money_cost": -20000,
+      "money_cost_przewalskia": -20000,
+      "build_consumes": {
+        "Drugs": 1
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": -1,
+      "secret": false,
+      "description_prose_unverified": "Smuggle drugs into the New Lunar Republic to gain 20,000 bits. You will lose 1 relationship with the New Lunar Republic for doing this (but that might be why you did...) You cannot do this if your relationship with the New Lunar Republic is below -500 or if your nation is younger than a week.",
+      "action_display_name": "Smuggle Drugs into the NLR",
+      "group": "Superpower Relations",
+      "produces": null
+    },
+    {
+      "recipe_id": 62,
+      "action_name": "Ship Tungsten to the Solar Empire",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Tungsten": 8
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 1,
+      "nlr_relation_on_build": 0,
+      "secret": false,
+      "description_prose_unverified": "Send 8 tungsten to the Solar Empire to better your relationship with it by 1.",
+      "action_display_name": "Ship Tungsten to the Solar Empire",
+      "group": "Superpower Relations",
+      "produces": null
+    },
+    {
+      "recipe_id": 63,
+      "action_name": "Ship Tungsten to the New Lunar Republic",
+      "money_cost": 0,
+      "money_cost_przewalskia": 0,
+      "build_consumes": {
+        "Tungsten": 8
+      },
+      "build_requires_owned": {},
+      "produces_amount": 0,
+      "region": "Any",
+      "subregion": "Any",
+      "satisfaction_on_build": 0,
+      "se_relation_on_build": 0,
+      "nlr_relation_on_build": 1,
+      "secret": false,
+      "description_prose_unverified": "Send 8 tungsten to the New Lunar Republic to better your relationship with it by 1.",
+      "action_display_name": "Ship Tungsten to the New Lunar Republic",
+      "group": "Superpower Relations",
+      "produces": null
+    }
+  ],
+  "units": {
+    "Cavalry": {
+      "type_id": 1,
+      "hire_cost_per_size": 200000,
+      "upkeep_per_size": {
+        "Apples": 5
+      }
+    },
+    "Tanks": {
+      "type_id": 2,
+      "hire_cost_per_size": 300000,
+      "upkeep_per_size": {
+        "Gasoline": 5
+      }
+    },
+    "Pegasi": {
+      "type_id": 3,
+      "hire_cost_per_size": 300000,
+      "upkeep_per_size": {
+        "Coffee": 5
+      }
+    },
+    "Unicorns": {
+      "type_id": 4,
+      "hire_cost_per_size": 400000,
+      "upkeep_per_size": {
+        "Gems": 5
+      }
+    },
+    "Naval": {
+      "type_id": 5,
+      "hire_cost_per_size": 250000,
+      "upkeep_per_size": {
+        "Gasoline": 5
+      }
+    },
+    "Alicorns": {
+      "type_id": 6,
+      "hire_cost_per_size": 2000000,
+      "upkeep_per_size": {
+        "Gems": 10
+      }
+    }
+  },
+  "weapons": [
+    {
+      "weapon_id": 1,
+      "name": "PRC-E6",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 0.8,
+        "tanks": 0.8,
+        "pegasi": 0.8,
+        "unicorns": 0.8,
+        "naval": 0.8
+      },
+      "build": {
+        "money_cost": 20000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 5
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "weapon_id": 2,
+      "name": "PRC-E7",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 0.9,
+        "tanks": 0.9,
+        "pegasi": 0.9,
+        "unicorns": 0.9,
+        "naval": 0.9
+      },
+      "build": {
+        "money_cost": 30000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 5,
+          "Tungsten": 1
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "weapon_id": 3,
+      "name": "PRC-E8",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 1.0,
+        "tanks": 1.0,
+        "pegasi": 1.0,
+        "unicorns": 1.0,
+        "naval": 1.1
+      },
+      "build": {
+        "money_cost": 40000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 8,
+          "Machinery Parts": 1
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 4,
+      "name": "ACFU",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 1.5,
+        "tanks": 1.0,
+        "pegasi": 1.0,
+        "unicorns": 1.0,
+        "naval": 1.0
+      },
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Machinery Parts": 1
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 5,
+      "name": "ATFU",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 1.0,
+        "tanks": 1.5,
+        "pegasi": 1.0,
+        "unicorns": 1.0,
+        "naval": 1.0
+      },
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 8,
+          "Machinery Parts": 1,
+          "Tungsten": 1
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 6,
+      "name": "APFU",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 1.0,
+        "tanks": 1.0,
+        "pegasi": 1.5,
+        "unicorns": 1.0,
+        "naval": 1.0
+      },
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 8,
+          "Machinery Parts": 1,
+          "Plastics": 1
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 7,
+      "name": "AUFU",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 1.0,
+        "tanks": 1.0,
+        "pegasi": 1.0,
+        "unicorns": 1.5,
+        "naval": 1.0
+      },
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 8,
+          "Machinery Parts": 1,
+          "Precision Parts": 1
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 8,
+      "name": "K9P",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 1.3,
+        "tanks": 1.1,
+        "pegasi": 1.1,
+        "unicorns": 1.1,
+        "naval": 1.1
+      },
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 15
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "weapon_id": 9,
+      "name": "ELBO-GRS",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 1.2,
+        "tanks": 1.4,
+        "pegasi": 1.2,
+        "unicorns": 1.2,
+        "naval": 1.2
+      },
+      "build": {
+        "money_cost": 60000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 15,
+          "Machinery Parts": 2
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 10,
+      "name": "Chem-Light Battery",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 1.25,
+        "tanks": 1.25,
+        "pegasi": 1.25,
+        "unicorns": 1.7,
+        "naval": 1.25
+      },
+      "build": {
+        "money_cost": 70000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 15,
+          "Precision Parts": 1
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 11,
+      "name": "Prop Wash",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 1.5,
+        "tanks": 1.25,
+        "pegasi": 1.25,
+        "unicorns": 1.25,
+        "naval": 1.25
+      },
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Precision Parts": 1
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "weapon_id": 12,
+      "name": "Steam Bucket",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 1.3,
+        "tanks": 1.3,
+        "pegasi": 1.3,
+        "unicorns": 1.3,
+        "naval": 1.6
+      },
+      "build": {
+        "money_cost": 60000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Precision Parts": 2
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 13,
+      "name": "Canopy Lights",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 1.4,
+        "tanks": 2.2,
+        "pegasi": 1.4,
+        "unicorns": 1.4,
+        "naval": 1.4
+      },
+      "build": {
+        "money_cost": 70000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Precision Parts": 3
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 14,
+      "name": "Long Stand",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 2.2,
+        "tanks": 1.9,
+        "pegasi": 1.9,
+        "unicorns": 1.9,
+        "naval": 1.9
+      },
+      "build": {
+        "money_cost": 80000,
+        "amount": 1,
+        "consumes": {
+          "Precision Parts": 5
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "weapon_id": 15,
+      "name": "Long Weight",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 1.95,
+        "tanks": 1.95,
+        "pegasi": 1.95,
+        "unicorns": 1.95,
+        "naval": 2.2
+      },
+      "build": {
+        "money_cost": 100000,
+        "amount": 1,
+        "consumes": {
+          "Precision Parts": 10
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 16,
+      "name": "Grid Squares",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 2.0,
+        "tanks": 2.0,
+        "pegasi": 3.0,
+        "unicorns": 2.0,
+        "naval": 2.0
+      },
+      "build": {
+        "money_cost": 120000,
+        "amount": 1,
+        "consumes": {
+          "Machinery Parts": 3,
+          "Precision Parts": 10
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 17,
+      "name": "Shoreline",
+      "for_force_type": "Naval",
+      "stats": {
+        "cavalry": 1.0,
+        "tanks": 1.35,
+        "pegasi": 1.0,
+        "unicorns": 1.0,
+        "naval": 1.0
+      },
+      "build": {
+        "money_cost": 60000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 5,
+          "Machinery Parts": 1
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 18,
+      "name": "Water Hammer",
+      "for_force_type": "Naval",
+      "stats": {
+        "cavalry": 1.1,
+        "tanks": 1.1,
+        "pegasi": 1.1,
+        "unicorns": 1.35,
+        "naval": 1.1
+      },
+      "build": {
+        "money_cost": 80000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Machinery Parts": 2
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "weapon_id": 19,
+      "name": "Waterline Eraser",
+      "for_force_type": "Naval",
+      "stats": {
+        "cavalry": 1.25,
+        "tanks": 1.25,
+        "pegasi": 1.25,
+        "unicorns": 1.25,
+        "naval": 1.25
+      },
+      "build": {
+        "money_cost": 100000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 15,
+          "Machinery Parts": 3
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    }
+  ],
+  "armor": [
+    {
+      "armor_id": 1,
+      "name": "Barding",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 0.4,
+        "tanks": 0.8,
+        "pegasi": 0.8,
+        "unicorns": 0.8,
+        "naval": 0.8
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 20000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 2
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "armor_id": 2,
+      "name": "Bigdog",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 0.65,
+        "tanks": 0.4,
+        "pegasi": 0.65,
+        "unicorns": 0.65,
+        "naval": 0.65
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 30000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 4,
+          "Tungsten": 4
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 3,
+      "name": "Nope",
+      "for_force_type": "Cavalry",
+      "stats": {
+        "cavalry": 0.5,
+        "tanks": 0.5,
+        "pegasi": 0.5,
+        "unicorns": 0.5,
+        "naval": 0.5
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 40000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 8,
+          "Composites": 1
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 4,
+      "name": "Trundle",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 0.3,
+        "tanks": 0.65,
+        "pegasi": 0.65,
+        "unicorns": 0.65,
+        "naval": 0.65
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 30000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 5,
+          "Vehicle Parts": 1
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 5,
+      "name": "Shepherd",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 0.55,
+        "tanks": 0.55,
+        "pegasi": 0.55,
+        "unicorns": 0.55,
+        "naval": 0.35
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 40000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Vehicle Parts": 1,
+          "Composites": 1
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 6,
+      "name": "Ohno",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 0.45,
+        "tanks": 0.35,
+        "pegasi": 0.45,
+        "unicorns": 0.45,
+        "naval": 0.45
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 15,
+          "Vehicle Parts": 1,
+          "Plastics": 1,
+          "Composites": 1
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 7,
+      "name": "Titan",
+      "for_force_type": "Tanks",
+      "stats": {
+        "cavalry": 0.35,
+        "tanks": 0.4,
+        "pegasi": 0.4,
+        "unicorns": 0.3,
+        "naval": 0.4
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 70000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 20,
+          "Vehicle Parts": 1,
+          "Composites": 2
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 8,
+      "name": "Cooler",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 0.8,
+        "tanks": 0.8,
+        "pegasi": 0.35,
+        "unicorns": 0.8,
+        "naval": 0.8
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 30000,
+        "amount": 1,
+        "consumes": {
+          "Composites": 2
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "armor_id": 9,
+      "name": "Wonder",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 0.3,
+        "tanks": 0.7,
+        "pegasi": 0.7,
+        "unicorns": 0.7,
+        "naval": 0.7
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 40000,
+        "amount": 1,
+        "consumes": {
+          "Composites": 4
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 10,
+      "name": "Griffin",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 0.45,
+        "tanks": 0.45,
+        "pegasi": 0.45,
+        "unicorns": 0.45,
+        "naval": 0.4
+      },
+      "carrying_capacity": 2,
+      "build": {
+        "money_cost": 60000,
+        "amount": 1,
+        "consumes": {
+          "Composites": 6
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 11,
+      "name": "Dragon",
+      "for_force_type": "Pegasi",
+      "stats": {
+        "cavalry": 0.35,
+        "tanks": 0.35,
+        "pegasi": 0.45,
+        "unicorns": 0.45,
+        "naval": 0.45
+      },
+      "carrying_capacity": 4,
+      "build": {
+        "money_cost": 80000,
+        "amount": 1,
+        "consumes": {
+          "Composites": 8
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 12,
+      "name": "Hornshield",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 0.3,
+        "tanks": 0.65,
+        "pegasi": 0.65,
+        "unicorns": 0.65,
+        "naval": 0.65
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 35000,
+        "amount": 1,
+        "consumes": {
+          "Precision Parts": 1,
+          "Composites": 2
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 13,
+      "name": "Librarian",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 0.55,
+        "tanks": 0.55,
+        "pegasi": 0.55,
+        "unicorns": 0.3,
+        "naval": 0.55
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 50000,
+        "amount": 1,
+        "consumes": {
+          "Precision Parts": 1,
+          "Composites": 4
+        },
+        "requires_owned": {
+          "Basic Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 14,
+      "name": "Shining",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 0.45,
+        "tanks": 0.45,
+        "pegasi": 0.45,
+        "unicorns": 0.45,
+        "naval": 0.35
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 70000,
+        "amount": 1,
+        "consumes": {
+          "Precision Parts": 2,
+          "Composites": 5
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 15,
+      "name": "D2A",
+      "for_force_type": "Unicorns",
+      "stats": {
+        "cavalry": 0.35,
+        "tanks": 0.4,
+        "pegasi": 0.35,
+        "unicorns": 0.4,
+        "naval": 0.4
+      },
+      "carrying_capacity": 0,
+      "build": {
+        "money_cost": 80000,
+        "amount": 1,
+        "consumes": {
+          "Precision Parts": 3,
+          "Composites": 6
+        },
+        "requires_owned": {
+          "Advanced Factory": 1
+        }
+      }
+    },
+    {
+      "armor_id": 16,
+      "name": "C-PON3",
+      "for_force_type": "Naval",
+      "stats": {
+        "cavalry": 0.65,
+        "tanks": 0.65,
+        "pegasi": 0.65,
+        "unicorns": 0.65,
+        "naval": 0.3
+      },
+      "carrying_capacity": 2,
+      "build": {
+        "money_cost": 40000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 10,
+          "Vehicle Parts": 2,
+          "Composites": 1
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "armor_id": 17,
+      "name": "Esohes",
+      "for_force_type": "Naval",
+      "stats": {
+        "cavalry": 0.35,
+        "tanks": 0.35,
+        "pegasi": 0.55,
+        "unicorns": 0.55,
+        "naval": 0.55
+      },
+      "carrying_capacity": 4,
+      "build": {
+        "money_cost": 70000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 15,
+          "Vehicle Parts": 2,
+          "Composites": 2
+        },
+        "requires_owned": {}
+      }
+    },
+    {
+      "armor_id": 18,
+      "name": "Shubidu",
+      "for_force_type": "Naval",
+      "stats": {
+        "cavalry": 0.4,
+        "tanks": 0.4,
+        "pegasi": 0.4,
+        "unicorns": 0.4,
+        "naval": 0.4
+      },
+      "carrying_capacity": 8,
+      "build": {
+        "money_cost": 100000,
+        "amount": 1,
+        "consumes": {
+          "Copper": 20,
+          "Vehicle Parts": 2,
+          "Composites": 4
+        },
+        "requires_owned": {}
+      }
+    }
+  ],
+  "governments": {
+    "Loose Despotism": {
+      "gdp_multiplier": null,
+      "satisfaction_cap": 1000,
+      "upkeep_per_tick": {}
+    },
+    "Democracy": {
+      "gdp_multiplier": null,
+      "satisfaction_cap": 1500,
+      "upkeep_per_tick": {
+        "Gasoline": 20,
+        "Vehicle Parts": 2
+      },
+      "satisfaction_if_paid": 15,
+      "satisfaction_if_unpaid": -20,
+      "relations_per_tick": {
+        "Solar Empire": -3,
+        "New Lunar Republic": 2
+      }
+    },
+    "Repression": {
+      "gdp_multiplier": 2.0,
+      "satisfaction_cap": 1000,
+      "upkeep_per_tick": {
+        "Gasoline": 10
+      },
+      "satisfaction_if_unpaid": -50,
+      "relations_per_tick": {
+        "Solar Empire": 2,
+        "New Lunar Republic": -3
+      }
+    },
+    "Independence": {
+      "gdp_multiplier": null,
+      "satisfaction_cap": 2500,
+      "upkeep_per_tick": {
+        "Gasoline": 40,
+        "Vehicle Parts": 4
+      },
+      "satisfaction_if_paid": 50,
+      "satisfaction_if_unpaid": -100,
+      "relations_per_tick": {
+        "Solar Empire": -3,
+        "New Lunar Republic": 6
+      }
+    },
+    "Decentralization": {
+      "gdp_multiplier": null,
+      "satisfaction_cap": 2000,
+      "upkeep_per_tick": {
+        "Gasoline": 50,
+        "Vehicle Parts": 5
+      },
+      "satisfaction_if_paid": 30,
+      "satisfaction_if_unpaid": -100,
+      "relations_per_tick": {
+        "Solar Empire": -3,
+        "New Lunar Republic": 4
+      }
+    },
+    "Authoritarianism": {
+      "gdp_multiplier": 2.5,
+      "satisfaction_cap": 1000,
+      "upkeep_per_tick": {
+        "Gasoline": 10,
+        "Machinery Parts": 3
+      },
+      "satisfaction_if_unpaid": -400,
+      "relations_per_tick": {
+        "Solar Empire": 4,
+        "New Lunar Republic": -3
+      }
+    },
+    "Oppression": {
+      "gdp_multiplier": 3.0,
+      "satisfaction_cap": 1000,
+      "upkeep_per_tick": {
+        "Gasoline": 10,
+        "Machinery Parts": 5
+      },
+      "satisfaction_if_unpaid": -500,
+      "relations_per_tick": {
+        "Solar Empire": 6,
+        "New Lunar Republic": -3
+      },
+      "can_use_market": false
+    },
+    "Solar Vassal": {
+      "gdp_multiplier": null,
+      "satisfaction_cap": 1250,
+      "upkeep_per_tick": {},
+      "relations_per_tick": {
+        "Solar Empire": 60
+      }
+    },
+    "Lunar Client": {
+      "gdp_multiplier": null,
+      "satisfaction_cap": 1250,
+      "upkeep_per_tick": {},
+      "relations_per_tick": {
+        "New Lunar Republic": 60
+      }
+    },
+    "Alicorn Elite": {
+      "gdp_multiplier": 6.0,
+      "satisfaction_cap": 5000,
+      "upkeep_per_tick": {},
+      "can_build_alicorns": true
+    },
+    "Transponyism": {
+      "gdp_multiplier": 8.0,
+      "satisfaction_cap": 7000,
+      "upkeep_per_tick": {},
+      "can_build_alicorns": true
+    }
+  },
+  "economies": {
+    "Poorly Defined": {
+      "upkeep_per_tick": {},
+      "buy_multiplier": 1.1,
+      "sell_multiplier": 0.9
+    },
+    "State Controlled": {
+      "upkeep_per_tick": {
+        "Cider": 6
+      },
+      "satisfaction_if_unpaid": -25,
+      "buy_multiplier": 1.2,
+      "sell_multiplier": 0.85,
+      "relations_per_tick": {
+        "Solar Empire": 1,
+        "New Lunar Republic": -3
+      }
+    },
+    "Free Market": {
+      "upkeep_per_tick": {
+        "Coffee": 6
+      },
+      "satisfaction_if_unpaid": -25,
+      "buy_multiplier": 1.03,
+      "sell_multiplier": 0.97,
+      "relations_per_tick": {
+        "Solar Empire": -3,
+        "New Lunar Republic": 1
+      }
+    }
+  },
+  "nations": {
+    "Saddle Arabia": {
+      "region_id": 1,
+      "produces_exclusively": [
+        "Oil"
+      ]
+    },
+    "Zebrica": {
+      "region_id": 2,
+      "produces_exclusively": [
+        "Copper",
+        "Tungsten",
+        "Gems"
+      ]
+    },
+    "Burrozil": {
+      "region_id": 3,
+      "produces_exclusively": [
+        "Apples",
+        "Coffee",
+        "Drugs"
+      ]
+    },
+    "Przewalskia": {
+      "region_id": 4,
+      "produces_exclusively": [],
+      "note": "Produces none of the region-locked raw goods and can never build their extractors. In exchange it pays cost_przewalskia -- a much lower money cost -- on everything it can build. Hard mode."
+    }
+  },
+  "regions": {
+    "0": "Any",
+    "1": "Saddle Arabia",
+    "2": "Zebrica",
+    "3": "Burrozil",
+    "4": "Przewalskia"
+  },
+  "subregions": {
+    "0": "Any",
+    "1": "North",
+    "2": "Central",
+    "3": "South"
+  },
+  "force_types": {
+    "1": "Cavalry",
+    "2": "Tanks",
+    "3": "Pegasi",
+    "4": "Unicorns",
+    "5": "Naval",
+    "6": "Alicorns"
+  },
+  "rules": {
+    "ticks": {
+      "interval_hours": 2,
+      "war_tick_hours_utc": [
+        0,
+        12
+      ],
+      "war_tick_note": "A war tick is an ordinary tick that also resolves combat. Military upkeep is charged ONLY on war ticks, forces only arrive on war ticks, and conquest only happens on a war tick. On non-war ticks armies do nothing and cost nothing.",
+      "hour_0_only": [
+        "force training +1 (capped at 20)",
+        "nation age +1"
+      ],
+      "source": "cron/frequent.php:1043-1046, :378, :1604-1613"
+    },
+    "production": {
+      "formula": "produced_per_tick = effect_amount * effective_count",
+      "effective_count": "resources.amount - resources.disabled",
+      "modifiers": "NONE. There is no tech, labor, or pollution scaling on output.",
+      "all_or_nothing": "If ANY per-tick input is short for the WHOLE stack of a building type, the entire stack produces nothing that tick and you lose 1 satisfaction per building. It is not partial or pro-rata.",
+      "same_tick_note": "Goods produced during a tick are written straight to the database and are NOT available to feed another building in that same tick.",
+      "disabled_note": "Each disabled building costs 1 satisfaction per tick.",
+      "source": "cron/frequent.php:259-340"
+    },
+    "pollution": {
+      "formula": "satisfaction_loss = ceil(max(0, effective_count - bad_min) ** 2 / bad_div)",
+      "applies_when": "bad_min is non-zero and effective_count > bad_min",
+      "per": "Computed separately per building type, then summed.",
+      "mitigation": "Total pollution across all building types is multiplied by 0.9 ** n, where n is the number of WORKING Solar/Lunar Environmental Facilities (they must have their 5 Energy per tick to count). The difference is refunded as satisfaction.",
+      "source": "cron/frequent.php:277-283, :350-356"
+    },
+    "gdp": {
+      "formula": "gdp = (50000 + sum(building.gdp_per_tick * working_count)) * multiplier",
+      "multiplier": "Fixed per government where governments[g].gdp_multiplier is set; otherwise 1 + (satisfaction / 1000).",
+      "base": 50000,
+      "caveat": "The in-game estimate in backend/allfunctions.php:113-117 sums gdp over ALL owned buildings regardless of whether their inputs are available, so it over-reports. Only working buildings actually pay out.",
+      "source": "cron/frequent.php:101, :321, :757-802"
+    },
+    "combat": {
+      "damage_per_hit": "round(weapon.dmg_<defender_type> * armor.arm_<attacker_type> * 1.5 ** ((attacker_training - defender_training) / 20), 3)",
+      "crossed_indexing_warning": "The attacker's weapon column is chosen by the DEFENDER's type, and the defender's armor column is chosen by the ATTACKER's type. Getting this backwards is the single easiest mistake to make here.",
+      "armor_direction": "arm_* is a damage MULTIPLIER. Lower is better.",
+      "home_defence_bonus": "Damage against a unit defending its own nation is multiplied by 0.75, unless that nation's owner is in stasis mode.",
+      "hits_per_unit": "A unit lands `size` hits.",
+      "casualties": "floor(round(accumulated_damage, 6)); at or above `size` the force is destroyed.",
+      "unequipped_defaults": {
+        "no_weapon": "dmg 0.25 against every type",
+        "no_armor": "arm 1.0 against every type (no reduction)",
+        "note": "Weapon/armor id 0 is 'Scrounged'. PHP treats id 0 as falsy, so Scrounged gear takes these fallbacks rather than any table row."
+      },
+      "alicorns": "Force type 6 is recast as type 5 (Naval) for targeting, with a flat dmg of 10 and arm of 0.1 against every type. Equipped weapons and armor are ignored entirely.",
+      "training": "National recruits arrive at training = min(Barracks owned, 20). Mercenaries arrive at training 10 and cost 2x-3x depending on relation.",
+      "source": "cron/frequent.php:1146-1167, :1232, :1394-1408"
+    },
+    "market": {
+      "price_is": "Per unit, always.",
+      "order_book": "marketplace = sell offers, buyermarketplace = standing bids. The unique key is (nation_id, resource_id, price), so one nation can hold several rows for the same good at different prices.",
+      "spread": "The buyer pays price * buy_multiplier; the seller receives price * sell_multiplier. The difference is destroyed, not transferred.",
+      "buyer_limits": "Minimum bid price 1000. Total outstanding bid value is capped at 200,000,000 + funds/10 for resources, 100,000,000 + funds/10 for gear.",
+      "source": "backend/backend_marketplace.php:183-199, backend/allfunctions.php:219-249"
+    },
+    "stockpile_siphon": {
+      "goods": "Anything over 50,000 loses ceil((amount - 50000) / 500) per tick.",
+      "equipment": "Weapons/armor over 1,000 lose ceil((amount - 1000) / 500) per tick.",
+      "source": "cron/frequent.php:343-374"
+    },
+    "satisfaction_penalties": {
+      "no_buildings": -5,
+      "military_size": "ceil((total force size - 20) / 2) if total size > 20",
+      "empire_size": "(nations - 1) ** 2 * 20, divided by 3 under Oppression, Alicorn Elite, or Transponyism",
+      "death": "Below -5000 satisfaction the nation is deleted into the graveyard.",
+      "rebels": "Below a per-government threshold, rebels (nation_id -3) spawn with size ceil(-satisfaction / 4) minus a government bonus.",
+      "source": "cron/frequent.php:156-163, :682-698, :806-960"
+    }
+  }
+}

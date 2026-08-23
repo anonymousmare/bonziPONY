@@ -53,6 +53,15 @@ class PetWindow(QWidget):
         self._dy = 0
         self._roaming = True
 
+        # Pinning — when on, the pony holds one screen corner instead of wandering.
+        # Note this does NOT touch _roaming: the behavior-duration check lives inside
+        # the roaming branch of _on_tick, so switching roaming off would freeze her on
+        # whatever animation happened to be playing. Pinning replaces the movement,
+        # not the behavior cycle.
+        self._pinned = False
+        self._pin_region = "bottom_right"
+        self._pin_margin = 12
+
         # Override animation (for pipeline states)
         self._override_anim_name: Optional[str] = None
         # Timed override (persists beyond conversation end)
@@ -209,9 +218,17 @@ class PetWindow(QWidget):
                     self._facing_right = should_right
                     self._update_facing()
 
+        # Hold the pinned corner. Runs every tick rather than once at startup because
+        # the window resizes itself to each animation frame just above, and the window
+        # is anchored top-left — so a corner computed once drifts as frames change size.
+        # Skipped while dragging so she still follows the cursor, then snaps back on release.
+        if self._pinned and not self._dragging:
+            self._apply_pin()
+
         # Move sprite if roaming and not dragging
         if self._roaming and not self._dragging and self._override_anim_name is None:
-            self._move_tick()
+            if not self._pinned:
+                self._move_tick()
 
             # Check if behavior duration expired
             if self._behavior_duration > 0:
@@ -502,18 +519,31 @@ class PetWindow(QWidget):
         logger.info("Doing trick: '%s'", trick.name)
         self._start_behavior(trick)
 
-    def move_to_region(self, region: str) -> None:
-        """Move the pony to a named screen region on the pony's current monitor."""
-        center = self.geometry().center()
-        screen = QApplication.screenAt(center) or QApplication.primaryScreen()
-        if not screen:
-            return
-        geom = screen.availableGeometry()
-        margin = 60
+    def pin_to_region(self, region: str = "bottom_right", margin: int = 12) -> None:
+        """Hold one screen corner instead of wandering.
+
+        Roaming stays on: it is what cycles behaviors, and the duration check that ends
+        a behavior lives inside its branch of _on_tick. Turning it off to stop movement
+        would also stop her ever changing animation. What pinning does is take the place
+        of _move_tick, then re-assert the corner every tick.
+        """
+        self._pinned = True
+        self._pin_region = region
+        self._pin_margin = margin
+        self._dx = 0
+        self._dy = 0
+        self._apply_pin()
+        logger.info("Pinned to '%s' (margin %d)", region, margin)
+
+    def unpin(self) -> None:
+        """Let the pony wander again."""
+        self._pinned = False
+
+    def _region_targets(self, geom, margin: int) -> dict:
+        """Top-left coordinates for each named region, given a screen and a margin."""
         w = self.width()
         h = self.height()
-
-        targets = {
+        return {
             "top_left": (geom.left() + margin, geom.top() + margin),
             "top_right": (geom.right() - w - margin, geom.top() + margin),
             "bottom_left": (geom.left() + margin, geom.bottom() - h - margin),
@@ -525,10 +555,47 @@ class PetWindow(QWidget):
             "bottom": (self.x(), geom.bottom() - h - margin),
         }
 
-        if region == "aside":
-            mid = geom.center().x()
-            region = "left" if self.x() + w // 2 < mid else "right"
+    def _apply_pin(self) -> None:
+        """Re-seat the window on its pinned corner, if it has drifted off it."""
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        if not screen:
+            return
+        # availableGeometry excludes the taskbar, which is what "bottom" should mean.
+        geom = screen.availableGeometry()
+        target = self._region_targets(geom, self._pin_margin).get(self._pin_region)
+        if target is None:
+            return
+        tx = max(geom.left(), min(target[0], geom.right() - self.width()))
+        ty = max(geom.top(), min(target[1], geom.bottom() - self.height()))
+        if (self.x(), self.y()) != (tx, ty):
+            self.move(tx, ty)
 
+    def move_to_region(self, region: str) -> None:
+        """Move the pony to a named screen region on the pony's current monitor."""
+        center = self.geometry().center()
+        screen = QApplication.screenAt(center) or QApplication.primaryScreen()
+        if not screen:
+            return
+        geom = screen.availableGeometry()
+        w = self.width()
+        h = self.height()
+
+        if region == "aside":
+            region = "left" if center.x() < geom.center().x() else "right"
+
+        if self._pinned:
+            # [MOVETO:...] still means something while pinned — it re-targets the pin
+            # rather than a one-shot move the next tick would immediately undo.
+            if region in self._region_targets(geom, self._pin_margin):
+                self._pin_region = region
+                self._apply_pin()
+                logger.info("Re-pinned to region '%s'", region)
+            else:
+                logger.warning("Unknown region '%s' — pin unchanged", region)
+            return
+
+        margin = 60
+        targets = self._region_targets(geom, margin)
         target = targets.get(region)
         if target:
             old_x = self.x()
@@ -612,6 +679,11 @@ class PetWindow(QWidget):
 
     def start_grab_run(self) -> None:
         """Force the pony into a fast run/trot animation with random direction changes."""
+        if self._pinned:
+            # Nothing to run to. The pin would drag her back every tick, which would
+            # read as a stutter rather than a refusal.
+            logger.debug("Ignoring grab-run while pinned")
+            return
         self._grab_running = True
         self._roaming = True
         # Cancel any overrides
@@ -688,6 +760,9 @@ class PetWindow(QWidget):
         The pony walks backward (opposite of facing direction) at a slow pace,
         using a walk/trot animation.  Used for tab-drag behavior.
         """
+        if self._pinned:
+            logger.debug("Ignoring drag-walk while pinned")
+            return
         self._drag_walking = True
         self._roaming = True
         self._override_anim_name = None
@@ -788,9 +863,11 @@ class PetWindow(QWidget):
             self._dragging = False
             self.setCursor(QCursor(Qt.ArrowCursor))
             # Re-center the pony on the cursor so follow-up interactions
-            # (and the input dialog anchor) land predictably.
-            gp = event.globalPos()
-            self.move(gp.x() - self.width() // 2, gp.y() - self.height() // 2)
+            # (and the input dialog anchor) land predictably. Skipped while pinned:
+            # she is already somewhere predictable, and the pin would yank her back.
+            if not self._pinned:
+                gp = event.globalPos()
+                self.move(gp.x() - self.width() // 2, gp.y() - self.height() // 2)
             from PyQt5.QtWidgets import QInputDialog, QLineEdit
             text, ok = QInputDialog.getText(
                 self, "Talk to the pony",

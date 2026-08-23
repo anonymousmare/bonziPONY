@@ -19,9 +19,14 @@ logger = logging.getLogger(__name__)
 
 # Priority levels (lower = higher priority)
 PRIORITY_USER_RESPONSE = 0       # direct reply to user speech
-PRIORITY_INTER_PONY_REPLY = 1    # pony responding in a group convo the user started
-PRIORITY_SPONTANEOUS_CHAT = 2    # inter-pony banter
+PRIORITY_NOTIFICATION = 1        # relayed CLOP alert or a welcome-back catch-up
+PRIORITY_SPONTANEOUS_CHAT = 2    # unprompted remarks
 PRIORITY_AUTONOMOUS = 3          # background autonomous speech
+
+# A relayed notification sits above idle chatter, because it is about something that
+# actually happened, and below a direct answer, because she must never talk over a reply
+# the user is waiting on. It reuses the slot inter-pony replies had before the multi-pony
+# system was removed.
 
 
 @dataclass(order=True)

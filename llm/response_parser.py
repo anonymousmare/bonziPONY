@@ -106,8 +106,15 @@ _RULE_PATTERN = re.compile(r"\[RULE:([^\]]+)\]", re.IGNORECASE)
 # Matches [DIARY:today i flew higher than ever] — write a first-person diary entry
 _DIARY_PATTERN = re.compile(r"\[DIARY:([^\]]+)\]", re.IGNORECASE)
 
+# Matches [LOOKUP:Coffee Farm] / [LOOKUP:pollution:Oil Fracker:14] — ask for real game
+# numbers instead of guessing. All of them, because she may want two things at once.
+_LOOKUP_PATTERN = re.compile(r"\[LOOKUP:([^\]]+)\]", re.IGNORECASE)
+
+# Matches [WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi] — simulate a battle
+_WARCALC_PATTERN = re.compile(r"\[WARCALC:([^\]]+)\]", re.IGNORECASE)
+
 # Catch-all: strip any remaining [TAG:...] bracket expressions the LLM may produce
-_LEFTOVER_TAG_PATTERN = re.compile(r"\[(?:MOVETO|PERSIST|ANIM|ACTION|CONVO|DESKTOP|DIRECTIVE|TIMER|ROUTINE|ENFORCE|DONE|DELAY|RULE|DIARY)\s*:[^\]]*\]", re.IGNORECASE)
+_LEFTOVER_TAG_PATTERN = re.compile(r"\[(?:MOVETO|PERSIST|ANIM|ACTION|CONVO|DESKTOP|DIRECTIVE|TIMER|ROUTINE|ENFORCE|DONE|DELAY|RULE|DIARY|LOOKUP|WARCALC)\s*:[^\]]*\]", re.IGNORECASE)
 
 # Strip <think>...</think> blocks from reasoning models (DeepSeek, QwQ, etc.)
 _THINK_BLOCK_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
@@ -187,6 +194,11 @@ class ParsedResponse:
     moveto_region: Optional[str] = None    # move pony to screen region
     standing_rule: Optional[str] = None    # create a permanent standing rule
     diary_entry: Optional[str] = None      # first-person journal text to append
+    #: [LOOKUP:...] bodies, in the order she asked. A list because one reply may want
+    #: two things, and answering only the first would make her ask again next round.
+    lookups: List[str] = field(default_factory=list)
+    #: [WARCALC:...] bodies. Separate from lookups because the arguments are structured.
+    warcalcs: List[str] = field(default_factory=list)
 
 
 def parse_response(raw: str) -> ParsedResponse:
@@ -436,6 +448,11 @@ def parse_response(raw: str) -> ParsedResponse:
     if diary_match:
         diary_entry = diary_match.group(1).strip()
 
+    # Parse [LOOKUP:...] and [WARCALC:...] — requests for real numbers. All of them, so
+    # a reply asking for two things gets both answered in one round trip.
+    lookups = [m.group(1).strip() for m in _LOOKUP_PATTERN.finditer(raw) if m.group(1).strip()]
+    warcalcs = [m.group(1).strip() for m in _WARCALC_PATTERN.finditer(raw) if m.group(1).strip()]
+
     clean_text = _ACTION_PATTERN.sub("", raw)
     clean_text = _DESKTOP_PATTERN.sub("", clean_text)
     clean_text = _DESKTOP_TRUNCATED.sub("", clean_text)
@@ -450,6 +467,8 @@ def parse_response(raw: str) -> ParsedResponse:
     clean_text = _MOVETO_PATTERN.sub("", clean_text)
     clean_text = _RULE_PATTERN.sub("", clean_text)
     clean_text = _DIARY_PATTERN.sub("", clean_text)
+    clean_text = _LOOKUP_PATTERN.sub("", clean_text)
+    clean_text = _WARCALC_PATTERN.sub("", clean_text)
     clean_text = _LEFTOVER_TAG_PATTERN.sub("", clean_text).strip()
     # Sanitize for TTS — strip code, markdown, HTML, URLs
     clean_text = sanitize_for_speech(clean_text)
@@ -459,7 +478,8 @@ def parse_response(raw: str) -> ParsedResponse:
                           delay_minutes=delay_minutes, delay_keyword=delay_keyword,
                           end_conversation=end_conversation,
                           persist_seconds=persist_seconds, moveto_region=moveto_region,
-                          standing_rule=standing_rule, diary_entry=diary_entry)
+                          standing_rule=standing_rule, diary_entry=diary_entry,
+                          lookups=lookups, warcalcs=warcalcs)
 
 
 def sanitize_for_speech(text: str) -> str:

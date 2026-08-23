@@ -296,6 +296,7 @@ def main() -> None:
     from desktop_pet.speech_bubble import SpeechBubble
     from desktop_pet.heard_text import HeardText
     from desktop_pet.countdown_timer import CountdownTimer
+    from desktop_pet.notification_box import NotificationBox
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -436,15 +437,10 @@ def main() -> None:
     )
     primary_pony.agent_loop = agent_loop
 
-    mp_cfg = config.multi_pony
     pony_manager = PonyManager(
         config=config,
         ponies_root=ponies_root,
         tts_queue=tts_queue,
-        max_ponies=mp_cfg.max_ponies,
-        chat_interval_s=mp_cfg.chat_interval_s,
-        max_chat_depth=mp_cfg.max_chat_depth,
-        piggyback_chance=mp_cfg.piggyback_chance,
     )
     pony_manager.register_primary(primary_pony)
     pet_window._pony_manager_ref = pony_manager  # collision avoidance
@@ -517,77 +513,6 @@ def main() -> None:
             except Exception as exc:
                 logger.warning("Failed to rescale %s: %s", pony.display_name, exc)
 
-    def _on_character_change(preset_name: str) -> None:
-        nonlocal pony_dir, sprite_manager, behavior_manager, effect_renderer
-        # 1. Switch LLM persona
-        set_preset(preset_name)
-        config.llm.preset = preset_name
-        _save_yaml_value("llm.preset", preset_name, str(Path(args.config)))
-
-        # 2. Derive new pony directory
-        char_name = slug_to_dir_name(preset_name)
-        pony_dir = ponies_root / char_name
-
-        # 3. Rebuild behaviors
-        behavior_manager = BehaviorManager(pony_dir / "pony.ini")
-        behavior_manager.parse()
-
-        # 4. Rebuild sprites
-        new_sm = SpriteManager(pony_dir, scale=config.desktop_pet.scale)
-        new_sm.build_sprite_map(behavior_manager)
-        new_sm.preload_all()
-        sprite_manager = new_sm
-
-        # 5. Rebuild effects
-        effect_renderer = EffectRenderer(new_sm, behavior_manager)
-
-        # 6. Swap into pet window
-        pet_window.sprite_manager = new_sm
-        pet_window.behavior_manager = behavior_manager
-        pet_window.effect_renderer = effect_renderer
-        pet_window._pick_and_start_behavior()
-
-        # 7. Fresh conversation for new character
-        llm_provider.reset_history()
-
-        # 8. Swap wake phrases for the new character
-        new_phrases = get_phrases_for(preset_name, config.wake_word.phrases)
-        detector.set_wake_phrases(new_phrases)
-
-        # 9. Swap acknowledgement sounds for the new character
-        ack_player.set_character(preset_name)
-
-        # 10. Switch PVT voice if using OpenAI-compatible TTS
-        if hasattr(tts, "set_character"):
-            tts.set_character(preset_name)
-
-        # 11. Update primary PonyInstance to reflect new character
-        from core.character_registry import get_display_name
-        primary_pony.slug = preset_name
-        primary_pony.display_name = get_display_name(preset_name)
-        primary_pony.pony_dir = pony_dir
-        primary_pony.sprite_manager = new_sm
-        primary_pony.behavior_manager = behavior_manager
-        primary_pony.effect_renderer = effect_renderer
-        primary_pony.name_keywords = _get_keywords_for(preset_name)
-        primary_pony.prompt_config.preset = preset_name
-        primary_pony.prompt_config.relationship_mode = config.llm.relationship
-        primary_pony.prompt_config.relationship_custom = config.llm.relationship_custom
-        llm_provider.character_name = get_display_name(preset_name)
-        try:
-            from tts.openai_compatible_tts import has_pvt_voice
-            primary_pony.has_voice = has_pvt_voice(preset_name)
-        except Exception:
-            primary_pony.has_voice = True
-        # Update voice slugs for pipeline/agent loop
-        pipeline.primary_voice_slug = preset_name
-        if agent_loop:
-            agent_loop._primary_voice_slug = preset_name
-        # Refresh companion lists so other ponies know the new name
-        pony_manager._refresh_all_companions()
-
-        logger.info("Character switched to: %s", char_name)
-
     def _on_provider_change(provider_name: str) -> None:
         nonlocal llm_provider
         from llm.factory import get_provider
@@ -655,7 +580,6 @@ def main() -> None:
         agent_loop=agent_loop,
         llm_provider=llm_provider,
         on_scale_change=_on_scale_change,
-        on_character_change=_on_character_change,
         ack_player=ack_player,
         on_provider_change=_on_provider_change,
         tts=tts,
@@ -706,6 +630,9 @@ def main() -> None:
 
     countdown = CountdownTimer()
     countdown.set_anchor_widget(pet_window)
+
+    notification_box = NotificationBox()
+    notification_box.set_anchor_widget(pet_window)
 
     # ── Connect signals → slots ──────────────────────────────────────────────
 
@@ -825,6 +752,8 @@ def main() -> None:
     pet_controller.drag_walk_stop.connect(pet_window.stop_drag_walk, Qt.QueuedConnection)
     pet_controller.countdown_start.connect(countdown.start_countdown, Qt.QueuedConnection)
     pet_controller.countdown_stop.connect(countdown.stop_countdown, Qt.QueuedConnection)
+    pet_controller.notification_received.connect(notification_box.push, Qt.QueuedConnection)
+    pet_controller.notifications_cleared.connect(notification_box.clear, Qt.QueuedConnection)
 
     # Wire cursor grab callback to agent loop (defined after both exist)
     # Also wire mouth position callback for tab-drag behavior
@@ -833,6 +762,86 @@ def main() -> None:
         agent_loop._get_mouth_position = pet_window.get_mouth_position
         agent_loop._on_drag_walk_start = lambda: pet_controller.drag_walk_start.emit()
         agent_loop._on_drag_walk_stop = lambda: pet_controller.drag_walk_stop.emit()
+
+    # ── CLOP bridge ──────────────────────────────────────────────────────────
+    # The 4CLOP monitor's poll loop, running on a background thread in this process.
+    # Its alerts arrive in the notification box instead of as Windows toasts.
+    clop_bridge = None
+    clop_unread = None
+    clop_cfg = getattr(config, "clop", None)
+    if clop_cfg and clop_cfg.enabled:
+        from core.clop_bridge import ClopBridge
+        from core.clop_unread import UnreadStore
+
+        clop_unread = UnreadStore()
+
+        clop_bridge = ClopBridge(
+            clop_cfg,
+            on_notification=pet_controller.on_notification,
+            unread=clop_unread,
+        )
+        if clop_bridge.start():
+            # Anything still unread from a previous run goes back in the box, so a restart
+            # does not quietly swallow what nobody has read yet.
+            for _item in clop_unread.items:
+                pet_controller.on_notification(_item)
+            # What she already knows about other nations. Kept next to directives.json and
+            # routines.json -- it is the same kind of thing: state that outlives the run.
+            _dossier = clop_bridge.dossier
+            logger.info(
+                "CLOP dossier %s: %d nation(s) read, %d alliance(s), %d awaiting a look",
+                _dossier.path.name, len(_dossier.nations), len(_dossier.alliances),
+                len(_dossier.pending()),
+            )
+            if agent_loop:
+                agent_loop.clop_unread = clop_unread
+                agent_loop.clop_bridge = clop_bridge
+                # Live tools are only registered while the bridge is connected; offering a
+                # tool that cannot work earns a confident answer built on an error string.
+                from core.clop_tools import ToolRegistry
+
+                agent_loop.clop_tools = ToolRegistry(clop_bridge)
+                # The prompt block lists the live lookups only when they actually work.
+                from llm.prompt import set_lookup_registry
+
+                set_lookup_registry(agent_loop.clop_tools)
+                logger.info("CLOP lookups available: %s",
+                            ", ".join(agent_loop.clop_tools.names))
+
+                # The hourly thread read, as a routine so it survives restarts through
+                # routines.json rather than restarting its clock on every launch.
+                from core.agent_loop import TASK_ROUTINE_PREFIX
+                from core.routines import Routine
+
+                thread_goal = f"{TASK_ROUTINE_PREFIX}clop_thread"
+                existing = next(
+                    (r for r in agent_loop.routine_manager.routines if r.goal == thread_goal),
+                    None,
+                )
+                hours = float(clop_cfg.thread_check_hours or 0)
+                if hours > 0 and existing is None:
+                    agent_loop.routine_manager.add(Routine(
+                        id="clop-thread-check",
+                        goal=thread_goal,
+                        urgency=1,
+                        schedule="interval",
+                        interval_hours=hours,
+                    ))
+                elif existing is not None:
+                    # Follow the config: an edited interval takes effect, and setting it to
+                    # 0 switches the check off without leaving a stale routine behind.
+                    existing.enabled = hours > 0
+                    existing.interval_hours = hours or existing.interval_hours
+                    agent_loop.routine_manager.save()
+            logger.info("CLOP bridge running — polling every %ds", clop_cfg.poll_interval_s)
+        else:
+            clop_bridge = None
+            logger.warning("CLOP bridge unavailable; continuing without CLOP features")
+
+    # Marking one read in the box is what marks it read in the store. The box is the only
+    # place that knows the user actually saw it.
+    if clop_unread is not None:
+        notification_box.dismissed.connect(clop_unread.mark_read)
 
     # ── Double-click activation ──────────────────────────────────────────────
 
@@ -1031,15 +1040,6 @@ def main() -> None:
                             agent_loop.tick()
                         except Exception as exc:
                             logger.debug("Agent tick error: %s", exc)
-                    # Inter-pony behavior (runs alongside agent loop)
-                    if mp_cfg.inter_pony_chat and len(pony_manager.ponies) > 1:
-                        try:
-                            # Individual pony remarks (each pony independently)
-                            pony_manager.maybe_individual_speech()
-                            # Coordinated group conversations (less frequent)
-                            pony_manager.maybe_spontaneous_chat()
-                        except Exception as exc:
-                            logger.debug("Inter-pony chat error: %s", exc)
                     if not agent_loop:
                         # Fallback: old random roll when agent is disabled
                         if random.random() < random_chance:
@@ -1081,12 +1081,10 @@ def main() -> None:
         logger.info("Shutdown signal received — cleaning up...")
         _shutdown_requested.set()
         pony_manager._shutting_down = True
+        if clop_bridge is not None:
+            clop_bridge.stop()
         # Stop TTS queue first to avoid audio playing during teardown
         tts_queue.stop()
-        # Remove secondary ponies
-        for pony in list(pony_manager.ponies):
-            if not pony.is_primary:
-                pony_manager.remove_pony(pony)
         if screen_monitor:
             screen_monitor.stop()
         detector.stop()
@@ -1099,16 +1097,18 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _shutdown)
     menu_builder.on_quit = lambda: _shutdown()
 
-    # ── Auto-load secondary ponies from config ─────────────────────────────
-    for slug in mp_cfg.secondary_ponies:
-        try:
-            pony_manager.add_pony(slug)
-        except Exception as exc:
-            logger.warning("Failed to auto-load secondary pony %s: %s", slug, exc)
-
     # ── Launch ───────────────────────────────────────────────────────────────
 
     pet_window.show()
+
+    # Pin after show(), not before: the window has no real geometry until it is
+    # shown, and the pin is computed from its current size.
+    if config.desktop_pet and config.desktop_pet.pin_to:
+        pet_window.pin_to_region(
+            config.desktop_pet.pin_to,
+            config.desktop_pet.pin_margin,
+        )
+
     pipeline_thread.start()
 
     pony_count = len(pony_manager.ponies)

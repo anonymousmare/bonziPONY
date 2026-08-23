@@ -562,15 +562,8 @@ class Pipeline:
             original_user_text = user_text  # save before injections for heuristic check
             self._remember_topic(user_text)
 
-            # Fix 6: Inject user speech into active group conversation + interrupt it
             # Fix 10: Route speech to the named pony, swap LLM for this turn
             if self.pony_manager:
-                if self.pony_manager._active_convo is not None:
-                    try:
-                        self.pony_manager._active_convo.inject_user(original_user_text)
-                        self.pony_manager._active_convo.interrupted = True
-                    except Exception:
-                        pass
                 if len(self.pony_manager.ponies) > 1:
                     try:
                         target = self.pony_manager.route_user_speech(original_user_text)
@@ -682,7 +675,7 @@ class Pipeline:
             )
 
             self._transition(PipelineState.THINK)
-            raw_response = self.llm.chat(user_text)
+            raw_response = self._chat_with_lore(user_text)
             logger.info("LLM response: %r", raw_response)
 
             # Detect character break — model meta-analyzing the prompt instead of role-playing
@@ -722,6 +715,12 @@ class Pipeline:
 
             from llm.response_parser import parse_response
             parsed: ParsedResponse = parse_response(raw_response)
+
+            # She asked for real numbers. Answer and let her speak again, before any of
+            # the side effects below run -- the reply that asked for a lookup is not the
+            # reply she meant to give.
+            if parsed.lookups or parsed.warcalcs:
+                parsed = self._resolve_lookups(parsed, user_text)
 
             if parsed.actions:
                 from robot.actions import RobotAction as _RA
@@ -913,17 +912,6 @@ class Pipeline:
                     from core.event_timeline import EventType
                     self._timeline.append(EventType.PONY_SAID,
                                           f'Pony replied: "{parsed.text[:150]}"')
-                # Offer piggyback to other ponies after user response
-                if self.pony_manager and len(self.pony_manager.ponies) > 1:
-                    try:
-                        _responder = _target or self.pony_manager.primary
-                        self.pony_manager.offer_piggyback(
-                            _responder,
-                            original_user_text or "",
-                            parsed.text,
-                        )
-                    except Exception as exc:
-                        logger.debug("Piggyback offer failed: %s", exc)
                 return True
             return False
 
@@ -1014,6 +1002,98 @@ class Pipeline:
         r"^.*?(?:would respond|would say|here's (?:how|what)|in character)\s*[:]\s*\n*",
         re.IGNORECASE | re.DOTALL,
     )
+
+    #: How many times one turn may go round asking for numbers. Two is enough for
+    #: "look it up, then look up the thing that answer suggested"; past that she is
+    #: stuck in a loop and the user is waiting.
+    MAX_LOOKUP_ROUNDS = 2
+
+    def _resolve_lookups(self, parsed: "ParsedResponse", user_text: str) -> "ParsedResponse":
+        """Run whatever she asked for, tell her the answer, and take her next reply.
+
+        History is rewound the same way the character-break retry does it -- pop the
+        assistant reply and the user turn, because ``chat()`` re-appends the user turn --
+        so the conversation ends up holding the question and the real answer, with the
+        request for numbers left out of it entirely.
+        """
+        from llm.response_parser import parse_response
+
+        registry = getattr(getattr(self, "agent_loop", None), "clop_tools", None)
+        if registry is None:
+            from core.clop_tools import ToolRegistry
+
+            registry = ToolRegistry(None)
+
+        for round_index in range(self.MAX_LOOKUP_ROUNDS):
+            if not (parsed.lookups or parsed.warcalcs):
+                return parsed
+
+            results = []
+            for query in parsed.lookups:
+                logger.info("Lookup: %s", query)
+                results.append(f"[{query}]\n{registry.dispatch(query)}")
+            for body in parsed.warcalcs:
+                logger.info("Warcalc: %s", body)
+                from core.clop_tools import run_warcalc_tag
+
+                results.append(f"[warcalc]\n{run_warcalc_tag(body)}")
+
+            hist = getattr(self.llm, "_history", None)
+            if hist is not None and len(hist) >= 2:
+                hist.pop()   # the reply that only asked for numbers
+                hist.pop()   # our user turn; chat() puts it back
+
+            answer = "\n\n".join(results)
+            raw = self.llm.chat(
+                f"[Looked up for you:\n\n{answer}\n\n"
+                f"Now answer using these numbers. Do not ask for them again.]\n\n{user_text}"
+            )
+            parsed = parse_response(raw)
+
+        if parsed.lookups or parsed.warcalcs:
+            # Still asking after the last round. Drop the unanswered requests so the tag
+            # cannot reach TTS, and let whatever she did say through.
+            logger.warning("Lookup loop hit %d rounds; giving up", self.MAX_LOOKUP_ROUNDS)
+            parsed.lookups = []
+            parsed.warcalcs = []
+        return parsed
+
+    def _chat_with_lore(self, user_text: str) -> str:
+        """Ask, with the game facts for anything she mentioned already in front of her.
+
+        The reference block goes on the front of the user turn rather than into the system
+        prompt, because ``get_system_prompt()`` takes no arguments and cannot see the
+        message. It is then wiped back out of history, so a long conversation does not
+        accumulate reference blocks inside ``max_history_turns``. Mutating ``_history``
+        directly is the same thing the character-break retry below already does.
+
+        A turn that mentions nothing game-related costs nothing at all -- ``context_for``
+        returns "" and this is a plain ``chat()``.
+        """
+        lore = ""
+        try:
+            from core import clop_lore
+
+            lore = clop_lore.context_for(user_text)
+        except Exception as exc:
+            # The lorebook is a convenience. A broken index must not cost the turn.
+            logger.warning("Lorebook lookup failed: %s", exc)
+
+        if not lore:
+            return self.llm.chat(user_text)
+
+        logger.info("Lorebook: injected %d chars of reference", len(lore))
+        raw = self.llm.chat(f"{lore}{user_text}")
+
+        hist = getattr(self.llm, "_history", None)
+        if hist:
+            # The user turn is second from the end (the assistant reply is last), unless
+            # the provider did something unexpected -- in which case leave it alone.
+            for entry in reversed(hist):
+                if entry.get("role") == "user":
+                    entry["content"] = user_text
+                    break
+        return raw
 
     @staticmethod
     def _is_character_break(response: str) -> bool:

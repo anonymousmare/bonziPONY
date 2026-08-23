@@ -32,6 +32,11 @@ from llm.prompt import get_character_name, get_system_prompt
 
 logger = logging.getLogger(__name__)
 
+#: A routine whose goal starts with this is background work she should go and do, not
+#: something to nag the user about. _check_routines otherwise turns every routine into a
+#: directive, which is the "remind them until they do it" shape.
+TASK_ROUTINE_PREFIX = "__task:"
+
 _DIRECTIVES_FILE = Path(__file__).parent.parent / "directives.json"
 
 
@@ -356,8 +361,16 @@ class AgentLoop:
         self._llm = llm
         self._tts = tts
         self._tts_config = tts_config  # for checking tts.enabled
-        self._tts_queue = None          # set by main.py for multi-pony voice routing
+        self._tts_queue = None          # set by main.py for voice routing
         self._primary_voice_slug = None # set by main.py
+        #: core.clop_unread.UnreadStore, set by main.py when the CLOP bridge is on.
+        #: Read by _welcome_back so she can say what arrived while the user was away.
+        self.clop_unread = None
+        #: core.clop_bridge.ClopBridge, set by main.py. Used by the hourly thread check.
+        self.clop_bridge = None
+        #: core.clop_tools.ToolRegistry, set by main.py. What she can look up rather than
+        #: guess at. Live tools are only in it while the bridge is connected.
+        self.clop_tools = None
         self._desktop = desktop_controller
         self._robot = robot
         self._detector = detector
@@ -1751,7 +1764,52 @@ class AgentLoop:
             sys_prompt = None
         raw = self._llm.generate_once(prompt, max_tokens=max_tokens,
                                        system_prompt=sys_prompt)
+        raw = self._resolve_lookups(raw, prompt, sys_prompt, max_tokens)
         return self._strip_think(raw).strip().strip('"').strip("'")
+
+    def _resolve_lookups(self, raw: str, prompt: str, sys_prompt, max_tokens: int) -> str:
+        """If she asked for real numbers, answer and let her try again.
+
+        The autonomous twin of Pipeline._resolve_lookups. Simpler, because generate_once
+        has no history to rewind -- the whole exchange is one prompt, so the answer is
+        just appended to it.
+
+        Bounded to one extra round: an unprompted remark is not worth three API calls,
+        and if she cannot say it with the numbers in hand she should say nothing.
+        """
+        from llm.response_parser import parse_response
+
+        parsed = parse_response(raw or "")
+        if not (parsed.lookups or parsed.warcalcs):
+            return raw
+
+        registry = self.clop_tools
+        if registry is None:
+            from core.clop_tools import ToolRegistry
+
+            registry = ToolRegistry(None)
+
+        results = []
+        for query in parsed.lookups:
+            results.append(f"[{query}]\n{registry.dispatch(query)}")
+        if parsed.warcalcs:
+            from core.clop_tools import run_warcalc_tag
+
+            for body in parsed.warcalcs:
+                results.append(f"[warcalc]\n{run_warcalc_tag(body)}")
+
+        answer = "\n\n".join(results)
+        logger.info("Autonomous lookup: %s", ", ".join(parsed.lookups + parsed.warcalcs))
+        try:
+            return self._llm.generate_once(
+                f"{prompt}\n\n[Looked up for you:\n\n{answer}\n\n"
+                f"Now say your line using these numbers. Do not ask for them again.]",
+                max_tokens=max_tokens,
+                system_prompt=sys_prompt,
+            )
+        except Exception as exc:
+            logger.warning("Autonomous lookup retry failed: %s", exc)
+            return raw
 
     def stop(self) -> None:
         """Signal this agent loop to stop. Called by PonyInstance.destroy()."""
@@ -3728,6 +3786,21 @@ class AgentLoop:
 
             context = " ".join(context_parts)
 
+            # What the CLOP monitor said while they were gone. This is the whole point of
+            # the catch-up: the notification box holds the detail, but the box is silent, so
+            # the count is the only thing that reaches someone walking back to the desk.
+            clop_context = ""
+            clop_hint = ""
+            unread = self.clop_unread
+            if unread is not None and len(unread):
+                clop_context = "\n" + unread.describe_for_prompt()
+                clop_hint = (
+                    f" Lead with what they missed on CLOP: {unread.summary_line()}. "
+                    f"Say the counts out loud, then your own read on which of them "
+                    f"actually matters. Do not list every one -- pick what is worth "
+                    f"their attention. The details are already on screen in the box."
+                )
+
             # Build the welcome-back prompt — natural speech, not JSON
             close_tab_hint = ""
             if pony_opened_descriptions:
@@ -3738,12 +3811,12 @@ class AgentLoop:
 
             prompt = (
                 f"(The user just came back after being away for {dur}.{current_app}"
-                f"{pony_opened_note} {context}\n"
+                f"{pony_opened_note} {context}{clop_context}\n"
                 f"Welcome them back naturally as {name}. "
                 f"If you know WHY they left, reference it. "
                 f"Be casual — don't robotically state the exact duration. "
                 f"Don't be fake or over-enthusiastic. Just react like a real friend "
-                f"who noticed they were gone.{close_tab_hint}\n"
+                f"who noticed they were gone.{clop_hint}{close_tab_hint}\n"
                 f"You can include action tags: [ACTION:WAVE], [MOVETO:center], "
                 f"[DESKTOP:BROWSE:url], [DESKTOP:MESS_MOUSE], etc. "
                 f"Include [CONVO:CONTINUE] so they can respond.)"
@@ -3757,6 +3830,13 @@ class AgentLoop:
                 if text:
                     self._speak(text)
                     self._log_action(f"Welcome back after {dur}")
+                    if unread is not None and len(unread) and self._timeline:
+                        from core.event_timeline import EventType
+
+                        self._timeline.append(
+                            EventType.NOTIFICATION_RELAYED,
+                            f"Caught the user up on CLOP: {unread.summary_line()}",
+                        )
 
                 # Execute any parsed actions/commands from the response
                 self._execute_parsed_actions(parsed)
@@ -4613,6 +4693,18 @@ class AgentLoop:
             self._last_wake_event = None  # consume the event
         if not due:
             return
+
+        # Routines whose goal starts with "__task:" are background work, not something to
+        # nag the user about. _check_routines otherwise turns every routine into a directive,
+        # which is the "remind them until they do it" shape and entirely wrong for "go and
+        # read the thread".
+        tasks = [r for r in due if r.goal.startswith(TASK_ROUTINE_PREFIX)]
+        due = [r for r in due if not r.goal.startswith(TASK_ROUTINE_PREFIX)]
+        for routine in tasks:
+            self._run_task_routine(routine.goal[len(TASK_ROUTINE_PREFIX):].strip())
+        if not due:
+            return
+
         # Batch all due routines into one LLM call for natural announcement
         name = get_character_name()
         goals = [r.goal for r in due]
@@ -4649,6 +4741,97 @@ class AgentLoop:
             text,
         )
         self._listen_for_reply()
+
+    def _run_task_routine(self, task: str) -> None:
+        """Dispatch a background task routine. Runs off the tick thread."""
+        if task != "clop_thread":
+            logger.warning("Unknown task routine %r — ignoring", task)
+            return
+        import threading
+
+        # Off the tick thread: reading a 400-post thread and calling a model would otherwise
+        # stall every other check behind it for seconds at a time.
+        threading.Thread(
+            target=self._check_clop_thread, name="clop-thread-check", daemon=True
+        ).start()
+
+    def _check_clop_thread(self) -> None:
+        """Read the 4CLOP thread and decide whether any of it is worth saying.
+
+        The gate runs first and is pure arithmetic, so a quiet thread costs no tokens at
+        all. Only when it says otherwise do the new posts reach a model, and she can still
+        answer [PASS].
+        """
+        from core import clop_thread
+
+        bridge = self.clop_bridge
+        if bridge is None or not getattr(bridge, "available", False):
+            logger.debug("Thread check skipped — the CLOP bridge is not connected")
+            return
+
+        state = clop_thread.ThreadState.load()
+        try:
+            posts = bridge.thread_posts()
+        except Exception as exc:
+            logger.warning("Could not read the 4CLOP thread: %s", exc)
+            return
+
+        thread = getattr(bridge.client, "fourchan_thread", None)
+        thread_url = getattr(thread, "page_url", "") if thread else ""
+
+        decision = clop_thread.decide(state, posts, thread_url)
+        logger.info("Thread check: %s (%d new)", decision.reason, decision.new_posts)
+        if not decision.should_read:
+            # Deliberately record nothing. Advancing the marker here would consume those
+            # posts unread, so two new posts this hour and two the next would each be
+            # dismissed as "only a couple" and never looked at. Leaving it alone lets them
+            # accumulate until there are enough to be worth a look.
+            return
+
+        rendered = clop_thread.render_new_posts(
+            posts, state,
+            board=getattr(thread, "board", "") if thread else "",
+            thread_id=getattr(thread, "thread_id", None) if thread else None,
+        )
+        prompt = clop_thread.build_prompt(rendered, state, get_character_name())
+
+        try:
+            raw = self._llm.generate_once(prompt, max_tokens=200)
+        except Exception as exc:
+            logger.warning("Thread comment generation failed: %s", exc)
+            return
+
+        from llm.response_parser import parse_response
+
+        text = parse_response(self._strip_think(raw or "")).text.strip()
+        passed = (not text) or clop_thread.PASS_TOKEN in (raw or "").upper()
+        comment = "" if passed else text
+
+        if comment and self._conversation_active:
+            # She has something to say but the user is mid-conversation, and a thread
+            # observation is never worth interrupting for. Record nothing and let the next
+            # check pick it up -- the posts stay unconsumed, and marking it as "commented"
+            # would silence the next gate on the strength of something never said.
+            logger.info("Thread check: had a comment but a conversation is active; deferring")
+            return
+
+        if comment:
+            self._speak(comment)
+            self._log_action("Commented on the 4CLOP thread")
+        else:
+            logger.info("Thread check: nothing worth saying")
+
+        if self._timeline:
+            from core.event_timeline import EventType
+
+            summary = (
+                f"Read {decision.new_posts} new thread post(s) and said: {comment[:120]}"
+                if comment
+                else f"Read {decision.new_posts} new thread post(s), said nothing"
+            )
+            self._timeline.append(EventType.THREAD_CHECKED, summary)
+
+        clop_thread.record(state, posts, comment, thread_url)
 
     def _timer_speak(self, goal: str, trigger_time: str, headsup: bool) -> str:
         """Generate an in-character timer announcement via LLM."""

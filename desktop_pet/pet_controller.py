@@ -10,14 +10,19 @@ from robot.actions import RobotAction
 
 logger = logging.getLogger(__name__)
 
-# Pipeline state → sprite animation name
+# Pipeline state → sprite animation name.
+#
+# These are canonical names from SpriteManager._KEYWORD_MAP, and a name the
+# character has no behavior for silently falls back to "stand" — so a map full of
+# animations Twilight does not have would render every state identically without
+# ever saying so. She has three: stand, read (read.gif) and alert (windblown).
 _STATE_ANIMATION_MAP = {
     "IDLE": None,           # Clear override, return to roaming
-    "ACKNOWLEDGE": "beep",
-    "LISTEN": "hover",
-    "THINK": "dizzy",
+    "ACKNOWLEDGE": "alert",  # Mane lifts as she looks up
+    "LISTEN": "stand",
+    "THINK": "read",        # Nose in a book while the model works
     "SPEAK": "stand",       # Stand still while talking — no movement
-    "ERROR": "dizzy",
+    "ERROR": "alert",
 }
 
 # Robot action → sprite animation name
@@ -68,6 +73,12 @@ class PetController(QObject):
     drag_walk_stop = pyqtSignal()           # stop drag walk, return to normal
     countdown_start = pyqtSignal(int)       # start countdown timer (seconds)
     countdown_stop = pyqtSignal()           # hide countdown timer
+    # A relayed notification, as the plain dict clop_monitor.alert_parts returns.
+    # QueuedConnection, not Blocking: nothing waits on the box being painted the way
+    # the speech bubble has to wait before TTS starts, and a blocking connection from
+    # the main thread to itself would deadlock.
+    notification_received = pyqtSignal(object)
+    notifications_cleared = pyqtSignal()    # drop everything currently queued
 
     def __init__(self) -> None:
         super().__init__()
@@ -116,6 +127,14 @@ class PetController(QObject):
     def on_move_to(self, region: str) -> None:
         """Called when the pony should move to a screen region."""
         self.move_to.emit(region)
+
+    def on_notification(self, payload: dict) -> None:
+        """Called from the CLOP bridge thread when an alert should be shown."""
+        self.notification_received.emit(payload)
+
+    def on_notifications_cleared(self) -> None:
+        """Called when everything queued should be dropped without being marked read."""
+        self.notifications_cleared.emit()
 
     # ── Slot helpers for connecting to GUI ──────────────────────────────────
 

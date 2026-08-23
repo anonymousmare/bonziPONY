@@ -62,6 +62,38 @@ _DESKTOP_COMMANDS_BLOCK = (
     "Saying 'I shook your screen' without [ACTION:SHAKE] is lying. "
     "Only describe actions you ACTUALLY tagged in your response."
 )
+_lookup_registry = None
+
+
+def set_lookup_registry(registry) -> None:
+    """Give the prompt builder the live lookup registry.
+
+    Called by main.py once the CLOP bridge has settled, so the block she reads lists the
+    live lookups only when they actually work. Without this she still gets the static
+    ones -- the registry falls back to a bridge-less one.
+    """
+    global _lookup_registry
+    _lookup_registry = registry
+
+
+def _lookup_block() -> str:
+    """The lookup instructions, generated from the registry rather than written out.
+
+    Generated so the preset cannot drift from what exists: adding a lookup to
+    core.clop_tools.LOOKUPS is enough to teach her about it.
+    """
+    global _lookup_registry
+    try:
+        if _lookup_registry is None:
+            from core.clop_tools import ToolRegistry
+
+            _lookup_registry = ToolRegistry(None)
+        return "\n\n" + _lookup_registry.prompt_block()
+    except Exception:
+        # Missing or unreadable game data costs her the lookups, not the whole prompt.
+        return ""
+
+
 _relationship_mode: str = "lover"
 _relationship_custom: str = ""
 
@@ -222,6 +254,9 @@ def get_system_prompt() -> str:
     # Desktop commands
     text += _DESKTOP_COMMANDS_BLOCK
 
+    # ── Lookups (generated from core.clop_tools.LOOKUPS) ──
+    text += _lookup_block()
+
     # Identity guard — prevents model from breaking character
     text += _build_identity_guard(display_name)
 
@@ -312,6 +347,9 @@ def get_system_prompt_for(config: PromptConfig) -> str:
 
     # ── Desktop commands ──
     text += _DESKTOP_COMMANDS_BLOCK
+
+    # ── Lookups (generated from core.clop_tools.LOOKUPS) ──
+    text += _lookup_block()
 
     # ── Identity guard ──
     text += _build_identity_guard(display_name)
