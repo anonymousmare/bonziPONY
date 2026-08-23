@@ -291,7 +291,13 @@ class RoutineManager:
         for r in self.routines:
             if not r.enabled:
                 continue
-            if r.last_fired_date == today:
+            # An interval routine is exempt from the once-a-day guard, which exists for the
+            # wall-clock schedules: "daily at 09:00" is true for the rest of the day once it
+            # passes, so without the guard it would fire every tick until midnight. An
+            # interval routine has no such window -- it is governed entirely by elapsed time
+            # below. With the guard applied, interval_hours=1 fired once around midnight and
+            # was then dead until the next day, which made hourly routines silently useless.
+            if r.schedule != "interval" and r.last_fired_date == today:
                 continue  # already fired today
 
             fired = False

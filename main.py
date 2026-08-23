@@ -795,6 +795,32 @@ def main() -> None:
                 agent_loop.clop_tools = ToolRegistry(clop_bridge)
                 logger.info("CLOP tools available: %s",
                             ", ".join(agent_loop.clop_tools.names))
+
+                # The hourly thread read, as a routine so it survives restarts through
+                # routines.json rather than restarting its clock on every launch.
+                from core.agent_loop import TASK_ROUTINE_PREFIX
+                from core.routines import Routine
+
+                thread_goal = f"{TASK_ROUTINE_PREFIX}clop_thread"
+                existing = next(
+                    (r for r in agent_loop.routine_manager.routines if r.goal == thread_goal),
+                    None,
+                )
+                hours = float(clop_cfg.thread_check_hours or 0)
+                if hours > 0 and existing is None:
+                    agent_loop.routine_manager.add(Routine(
+                        id="clop-thread-check",
+                        goal=thread_goal,
+                        urgency=1,
+                        schedule="interval",
+                        interval_hours=hours,
+                    ))
+                elif existing is not None:
+                    # Follow the config: an edited interval takes effect, and setting it to
+                    # 0 switches the check off without leaving a stale routine behind.
+                    existing.enabled = hours > 0
+                    existing.interval_hours = hours or existing.interval_hours
+                    agent_loop.routine_manager.save()
             logger.info("CLOP bridge running — polling every %ds", clop_cfg.poll_interval_s)
         else:
             clop_bridge = None

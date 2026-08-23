@@ -32,6 +32,11 @@ from llm.prompt import get_character_name, get_system_prompt
 
 logger = logging.getLogger(__name__)
 
+#: A routine whose goal starts with this is background work she should go and do, not
+#: something to nag the user about. _check_routines otherwise turns every routine into a
+#: directive, which is the "remind them until they do it" shape.
+TASK_ROUTINE_PREFIX = "__task:"
+
 _DIRECTIVES_FILE = Path(__file__).parent.parent / "directives.json"
 
 
@@ -4643,6 +4648,18 @@ class AgentLoop:
             self._last_wake_event = None  # consume the event
         if not due:
             return
+
+        # Routines whose goal starts with "__task:" are background work, not something to
+        # nag the user about. _check_routines otherwise turns every routine into a directive,
+        # which is the "remind them until they do it" shape and entirely wrong for "go and
+        # read the thread".
+        tasks = [r for r in due if r.goal.startswith(TASK_ROUTINE_PREFIX)]
+        due = [r for r in due if not r.goal.startswith(TASK_ROUTINE_PREFIX)]
+        for routine in tasks:
+            self._run_task_routine(routine.goal[len(TASK_ROUTINE_PREFIX):].strip())
+        if not due:
+            return
+
         # Batch all due routines into one LLM call for natural announcement
         name = get_character_name()
         goals = [r.goal for r in due]
@@ -4679,6 +4696,97 @@ class AgentLoop:
             text,
         )
         self._listen_for_reply()
+
+    def _run_task_routine(self, task: str) -> None:
+        """Dispatch a background task routine. Runs off the tick thread."""
+        if task != "clop_thread":
+            logger.warning("Unknown task routine %r — ignoring", task)
+            return
+        import threading
+
+        # Off the tick thread: reading a 400-post thread and calling a model would otherwise
+        # stall every other check behind it for seconds at a time.
+        threading.Thread(
+            target=self._check_clop_thread, name="clop-thread-check", daemon=True
+        ).start()
+
+    def _check_clop_thread(self) -> None:
+        """Read the 4CLOP thread and decide whether any of it is worth saying.
+
+        The gate runs first and is pure arithmetic, so a quiet thread costs no tokens at
+        all. Only when it says otherwise do the new posts reach a model, and she can still
+        answer [PASS].
+        """
+        from core import clop_thread
+
+        bridge = self.clop_bridge
+        if bridge is None or not getattr(bridge, "available", False):
+            logger.debug("Thread check skipped — the CLOP bridge is not connected")
+            return
+
+        state = clop_thread.ThreadState.load()
+        try:
+            posts = bridge.thread_posts()
+        except Exception as exc:
+            logger.warning("Could not read the 4CLOP thread: %s", exc)
+            return
+
+        thread = getattr(bridge.client, "fourchan_thread", None)
+        thread_url = getattr(thread, "page_url", "") if thread else ""
+
+        decision = clop_thread.decide(state, posts, thread_url)
+        logger.info("Thread check: %s (%d new)", decision.reason, decision.new_posts)
+        if not decision.should_read:
+            # Deliberately record nothing. Advancing the marker here would consume those
+            # posts unread, so two new posts this hour and two the next would each be
+            # dismissed as "only a couple" and never looked at. Leaving it alone lets them
+            # accumulate until there are enough to be worth a look.
+            return
+
+        rendered = clop_thread.render_new_posts(
+            posts, state,
+            board=getattr(thread, "board", "") if thread else "",
+            thread_id=getattr(thread, "thread_id", None) if thread else None,
+        )
+        prompt = clop_thread.build_prompt(rendered, state, get_character_name())
+
+        try:
+            raw = self._llm.generate_once(prompt, max_tokens=200)
+        except Exception as exc:
+            logger.warning("Thread comment generation failed: %s", exc)
+            return
+
+        from llm.response_parser import parse_response
+
+        text = parse_response(self._strip_think(raw or "")).text.strip()
+        passed = (not text) or clop_thread.PASS_TOKEN in (raw or "").upper()
+        comment = "" if passed else text
+
+        if comment and self._conversation_active:
+            # She has something to say but the user is mid-conversation, and a thread
+            # observation is never worth interrupting for. Record nothing and let the next
+            # check pick it up -- the posts stay unconsumed, and marking it as "commented"
+            # would silence the next gate on the strength of something never said.
+            logger.info("Thread check: had a comment but a conversation is active; deferring")
+            return
+
+        if comment:
+            self._speak(comment)
+            self._log_action("Commented on the 4CLOP thread")
+        else:
+            logger.info("Thread check: nothing worth saying")
+
+        if self._timeline:
+            from core.event_timeline import EventType
+
+            summary = (
+                f"Read {decision.new_posts} new thread post(s) and said: {comment[:120]}"
+                if comment
+                else f"Read {decision.new_posts} new thread post(s), said nothing"
+            )
+            self._timeline.append(EventType.THREAD_CHECKED, summary)
+
+        clop_thread.record(state, posts, comment, thread_url)
 
     def _timer_speak(self, goal: str, trigger_time: str, headsup: bool) -> str:
         """Generate an in-character timer announcement via LLM."""
