@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -423,189 +425,297 @@ def calc_force_cost(forces: List[Dict], przewalskia: bool = False) -> str:
     return "\n".join(lines)
 
 
-# ── Schemas and dispatch ──────────────────────────────────────────────────────
-
-def _schema(name: str, description: str, properties: Dict[str, Any],
-            required: Optional[List[str]] = None) -> Dict[str, Any]:
-    return {
-        "name": name,
-        "description": description,
-        "input_schema": {
-            "type": "object",
-            "properties": properties,
-            "required": required or [],
-        },
-    }
 
 
-_FORCE_ITEM = {
-    "type": "object",
-    "properties": {
-        "name": {"type": "string", "description": "a label for this force"},
-        "type": {
-            "type": "string",
-            "enum": ["Cavalry", "Tanks", "Pegasi", "Unicorns", "Naval", "Alicorns"],
-        },
-        "size": {"type": "integer", "description": "number of troops"},
-        "training": {"type": "integer", "description": "0-20; from Barracks owned"},
-        "weapon": {"type": "string", "description": "exact weapon name, or omit for unequipped"},
-        "armor": {"type": "string", "description": "exact armour name, or omit for unequipped"},
-    },
-    "required": ["type", "size"],
-}
+# ── The lookup table ──────────────────────────────────────────────────────────
+#
+# One row per thing she can look up. This drives three things at once -- the
+# dispatcher, the prompt block she reads, and the tests -- so the instructions in
+# her prompt cannot drift from what actually exists.
+#
+# There is no API tool-calling schema here on purpose. She asks for things with a
+# [LOOKUP:...] tag, the same way she already asks for [DESKTOP:...] and [ACTION:...],
+# because that is the one mechanism that works identically on every backend. Native
+# function calling would not: DeepSeek intermittently emits tool calls as plain text
+# in the content field rather than the structured field, and a custom OpenAI-compatible
+# base_url is indistinguishable from a real OpenAI one, so there is no way to know in
+# advance whether a given endpoint honours `tools=`. A tag is just text. It cannot fall
+# through to text mode, because text is the mode.
 
-#: The static tools, available whether or not the bridge is connected.
-STATIC_SCHEMAS = [
-    _schema(
-        "get_building",
-        "Full detail on one building: money and material cost to build, what it produces and "
-        "consumes per tick, its satisfaction and GDP effect, and its pollution parameters. "
-        "Use this rather than answering from memory -- the numbers are exact.",
-        {"name": {"type": "string", "description": "e.g. 'Coffee Farm' or 'Build Coffee Farm'"}},
-        ["name"],
-    ),
-    _schema(
-        "list_buildings",
-        "List buildings, optionally filtered by what they produce, what they consume, or "
-        "which nation region they are locked to.",
-        {
-            "produces": {"type": "string", "description": "good name, e.g. 'Coffee'"},
-            "consumes": {"type": "string", "description": "good name, e.g. 'Energy'"},
-            "region": {"type": "string",
-                       "description": "Saddle Arabia, Zebrica, Burrozil or Przewalskia"},
-        },
-    ),
-    _schema(
-        "get_good",
-        "What produces a good, what consumes it, and whether it can be traded.",
-        {"name": {"type": "string"}},
-        ["name"],
-    ),
-    _schema(
-        "calc_pollution",
-        "The satisfaction cost per tick of owning N of a building, and what environmental "
-        "facilities would save. Pollution is quadratic past a free allowance.",
-        {
-            "building": {"type": "string"},
-            "count": {"type": "integer", "description": "how many you own (amount minus disabled)"},
-            "env_facilities": {"type": "integer",
-                               "description": "working Solar/Lunar Environmental Facilities"},
-        },
-        ["building", "count"],
-    ),
-    _schema(
-        "get_rules",
-        "The tick rules that exist only in the game's code and no table: production gating, "
-        "pollution, GDP, combat, market spread, war ticks, satisfaction penalties.",
-        {"topic": {"type": "string",
-                   "description": "ticks, production, pollution, gdp, combat, market, "
-                                  "stockpile_siphon, satisfaction_penalties"}},
-    ),
-    _schema(
-        "get_nation_types",
-        "What each nation type produces exclusively, and the government GDP multipliers and "
-        "satisfaction caps.",
-        {},
-    ),
-    _schema(
-        "run_warcalc",
-        "Simulate a battle and report exactly who dies. This is a port of the game's own "
-        "combat loop, so the numbers are what the tick would actually do.",
-        {
-            "attackers": {"type": "array", "items": _FORCE_ITEM},
-            "defenders": {"type": "array", "items": _FORCE_ITEM},
-            "defender_bonus": {
-                "type": "boolean",
-                "description": "true when the defenders are on their own soil and their owner "
-                               "is not in stasis; applies a 0.75 multiplier to damage against "
-                               "them. Defaults to true.",
-            },
-        },
-        ["attackers", "defenders"],
-    ),
-    _schema(
-        "calc_force_cost",
-        "What it costs to raise and equip a set of forces: money, materials as bought, "
-        "materials unwound to raw, and upkeep per war tick.",
-        {
-            "forces": {"type": "array", "items": _FORCE_ITEM},
-            "przewalskia": {"type": "boolean",
-                            "description": "use Przewalskia's discounted crafting prices"},
-        },
-        ["forces"],
-    ),
-]
 
-#: Tools that need the authenticated session.
-LIVE_SCHEMAS = [
-    _schema("get_stockpiles", "How much of every good the user's nation is holding right now.", {}),
-    _schema(
-        "get_nation_status",
-        "The user's nation right now: government, economy, satisfaction, funds, GDP last "
-        "turn, and its standing with the Solar Empire and New Lunar Republic.",
-        {},
-    ),
-    _schema(
-        "get_market",
-        "Pending buy orders on the market -- what other nations are bidding, at what price, "
-        "and whether they are allies or enemies. Only covers goods the monitor watches.",
-        {"good": {"type": "string", "description": "narrow to one good; omit for all watched"}},
-    ),
-    _schema(
-        "read_thread",
-        "Read the configured 4chan thread. Posts are renumbered 1..N and quote-links rewritten "
-        "to match. Pass since_post to see only what is new.",
-        {"since_post": {"type": "integer",
-                        "description": "real post number; only later posts are returned"}},
-    ),
-]
+@dataclass(frozen=True)
+class Lookup:
+    """One lookup: what to call it, what it needs, and how to describe it to her."""
 
-STATIC_TOOLS: Dict[str, Callable[..., str]] = {
-    "get_building": get_building,
-    "list_buildings": list_buildings,
-    "get_good": get_good,
-    "calc_pollution": calc_pollution,
-    "get_rules": get_rules,
-    "get_nation_types": get_nation_types,
-    "run_warcalc": run_warcalc,
-    "calc_force_cost": calc_force_cost,
-}
+    name: str
+    #: Other things she might reasonably write instead of `name`.
+    aliases: Tuple[str, ...]
+    #: Called with the positional arguments parsed out of the tag.
+    run: Callable[..., str]
+    #: Argument names in order, for the prompt. A trailing "?" marks it optional.
+    args: Tuple[str, ...]
+    #: One line, shown to her in the prompt block.
+    help: str
+    #: True when it needs the authenticated session, so it is only offered when
+    #: the bridge is connected.
+    live: bool = False
+
+
+LOOKUPS: Tuple[Lookup, ...] = (
+    Lookup("building", ("build",), get_building, ("name",),
+           "what a building costs to build and what it does per tick"),
+    Lookup("buildings", ("list",), list_buildings, ("produces?", "consumes?", "region?"),
+           "which buildings make or eat a thing"),
+    Lookup("good", ("resource",), get_good, ("name",),
+           "what produces a good, what eats it, what it is needed to build"),
+    Lookup("pollution", (), calc_pollution, ("building", "count", "env_facilities?"),
+           "the satisfaction cost of owning N of something"),
+    Lookup("rules", ("rule",), get_rules, ("topic?",),
+           "how ticks, production, pollution, GDP, combat or the market actually work"),
+    Lookup("nations", ("nation", "governments"), get_nation_types, (),
+           "what each nation produces, and the government multipliers and caps"),
+    Lookup("cost", ("forcecost", "army"), calc_force_cost, ("forces",),
+           "what raising and equipping an army costs"),
+    Lookup("stockpiles", ("stock", "holding"), None, (),
+           "what the user is holding right now", live=True),
+    Lookup("status", ("nation_status", "empire"), None, (),
+           "the user's government, economy, satisfaction, funds and standing", live=True),
+    Lookup("market", ("bids", "orders"), None, ("good?",),
+           "who is bidding on what, at what price", live=True),
+    Lookup("thread", ("4chan", "posts"), None, ("since_post?",),
+           "the 4CLOP thread on /mlp/", live=True),
+)
+
+BY_NAME: Dict[str, Lookup] = {}
+for _lookup in LOOKUPS:
+    BY_NAME[_lookup.name] = _lookup
+    for _alias in _lookup.aliases:
+        BY_NAME[_alias] = _lookup
+del _lookup
+
+
+def _coerce(value: str, name: str):
+    """Tag arguments arrive as strings; a few lookups want numbers."""
+    if name.rstrip("?") in ("count", "env_facilities", "since_post"):
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            raise ToolError(f"{name.rstrip('?')} must be a whole number, got {value!r}")
+    return value
 
 
 class ToolRegistry:
-    """The tools available right now, and how to run one.
+    """What she can look up right now, and how to run one.
 
-    Live tools are only offered when the bridge is connected. Offering a tool that cannot
-    work would earn a confident answer built on an error string, which is worse than the
-    character saying she cannot see the game at the moment.
+    Live lookups are only registered when the bridge is connected. Offering one that
+    cannot work would earn a confident answer built on an error string, which is worse
+    than her saying she cannot see the game at the moment.
     """
 
     def __init__(self, bridge=None) -> None:
         self.bridge = bridge
-        self._tools: Dict[str, Callable[..., str]] = dict(STATIC_TOOLS)
-        self.schemas: List[Dict[str, Any]] = list(STATIC_SCHEMAS)
+        self._live: Dict[str, Callable[..., str]] = {}
         if bridge is not None and getattr(bridge, "available", False):
-            self._tools.update(make_live_tools(bridge))
-            self.schemas = self.schemas + list(LIVE_SCHEMAS)
+            self._live = make_live_tools(bridge)
+
+        self.available: Tuple[Lookup, ...] = tuple(
+            l for l in LOOKUPS if not l.live or self._live
+        )
 
     @property
     def names(self) -> List[str]:
-        return sorted(self._tools)
+        return [l.name for l in self.available]
 
-    def dispatch(self, name: str, arguments: Dict[str, Any]) -> str:
-        """Run one tool. Errors are returned as text for the model, not raised."""
-        tool = self._tools.get(name)
-        if tool is None:
+    def _callable(self, lookup: Lookup) -> Optional[Callable[..., str]]:
+        if not lookup.live:
+            return lookup.run
+        # The live tools are built per-bridge, so they are looked up by name.
+        return self._live.get({
+            "stockpiles": "get_stockpiles",
+            "status": "get_nation_status",
+            "market": "get_market",
+            "thread": "read_thread",
+        }[lookup.name])
+
+    def dispatch(self, query: str) -> str:
+        """Run one `[LOOKUP:...]` body. Errors come back as text, never raised.
+
+        Handing the error to her rather than raising it is deliberate: a model that
+        asked for a building that does not exist usually recovers by asking for the
+        right one, and a traceback here would cost the whole turn.
+        """
+        parts = [p.strip() for p in str(query).split(":")]
+        if not parts or not parts[0]:
+            return f"error: empty lookup. Try one of: {', '.join(self.names)}"
+
+        head = parts[0].casefold()
+        lookup = BY_NAME.get(head)
+
+        if lookup is None:
+            # No kind given, so treat the whole thing as a name and find it. This is
+            # the forgiving path: [LOOKUP:Coffee Farm] should just work.
+            return self._by_name_only(query)
+
+        if lookup not in self.available:
             return (
-                f"error: no tool called {name!r}. Available: {', '.join(self.names)}"
+                f"error: {lookup.name} needs the live game connection, which is not "
+                f"available right now. You can still use: {', '.join(self.names)}"
             )
+
+        run = self._callable(lookup)
+        if run is None:
+            return f"error: {lookup.name} is not available right now"
+
+        supplied = parts[1:]
+        required = [a for a in lookup.args if not a.endswith("?")]
+        if len(supplied) < len(required):
+            return (
+                f"error: {lookup.name} needs {', '.join(lookup.args) or 'no arguments'}. "
+                f"Write it as [LOOKUP:{lookup.name}"
+                + ("".join(f":{a}" for a in lookup.args) if lookup.args else "")
+                + "]"
+            )
+
         try:
-            result = tool(**(arguments or {}))
+            args = [_coerce(v, n) for v, n in zip(supplied, lookup.args)]
+            return str(run(*args))
         except ToolError as exc:
             return f"error: {exc}"
         except TypeError as exc:
-            return f"error: wrong arguments for {name}: {exc}"
+            return f"error: wrong arguments for {lookup.name}: {exc}"
         except Exception as exc:
-            logger.exception("Tool %s failed", name)
-            return f"error: {name} failed: {exc}"
-        return str(result)
+            logger.exception("Lookup %s failed", lookup.name)
+            return f"error: {lookup.name} failed: {exc}"
+
+    def _by_name_only(self, query: str) -> str:
+        """`[LOOKUP:Coffee Farm]` -- work out whether it is a building or a good.
+
+        "Ambiguous" and "absent" are different problems and get different answers. A
+        name matching twelve DNA facilities should list them, not claim it does not
+        exist -- she can then ask again for the one she meant.
+        """
+        data = gamedata()
+        ambiguous = None
+        for rows, run in ((data["buildings"], get_building), (data["goods"], get_good)):
+            try:
+                _find(rows, query)
+            except ToolError as exc:
+                if "matches several" in str(exc):
+                    ambiguous = exc
+                continue
+            try:
+                return str(run(query))
+            except ToolError as exc:
+                return f"error: {exc}"
+        if ambiguous is not None:
+            return f"error: {ambiguous}"
+        return (
+            f"error: nothing called {query!r}. Name a building or a good, or use one of: "
+            f"{', '.join(self.names)}"
+        )
+
+    def prompt_block(self) -> str:
+        """The instructions she reads, generated from this table.
+
+        Generated rather than written out in the preset so the two cannot disagree --
+        adding a lookup here is enough to teach her about it.
+        """
+        lines = [
+            "== LOOKING THINGS UP ==",
+            "",
+            "You can look up real numbers instead of guessing. Write the tag on its own "
+            "and stop -- you will be given the answer and get to speak straight after, so "
+            "do not guess in the same breath as asking.",
+            "",
+        ]
+        for lookup in self.available:
+            args = "".join(f":{a.rstrip('?')}" for a in lookup.args)
+            optional = " (arguments after the first are optional)" if any(
+                a.endswith("?") for a in lookup.args) else ""
+            lines.append(f"  [LOOKUP:{lookup.name}{args}] — {lookup.help}{optional}")
+        lines += [
+            "  [LOOKUP:<any building or good>] — the short way; works without a kind",
+            "  [WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi/Canopy Lights/Dragon/6]",
+            "      — simulate a battle. Each side is 'count Type/Weapon/Armour/training',",
+            "      several forces separated by commas, the two sides separated by ' vs '.",
+            "",
+            "Never invent a cost, a production rate or a battle outcome. Being confidently "
+            "wrong about a build cost is worse than taking a second to check. If a reference "
+            "block already appears above with what you need, use it and do not look it up again.",
+        ]
+        return "\n".join(lines)
+
+
+# ── Warcalc ───────────────────────────────────────────────────────────────────
+
+#: One force, written the way she is asked to write it in the prompt block:
+#: "40 Unicorns/Grid Squares/Shining/12" -- count, type, weapon, armour, training.
+#: Weapon, armour and training are all optional, so "60 Pegasi" is a valid force of
+#: unequipped, untrained pegasi.
+_FORCE_RE = re.compile(
+    r"^\s*(?P<size>\d+)\s+(?P<type>[A-Za-z]+)\s*"
+    r"(?:/\s*(?P<weapon>[^/]*?)\s*)?"
+    r"(?:/\s*(?P<armor>[^/]*?)\s*)?"
+    r"(?:/\s*(?P<training>\d+)\s*)?$"
+)
+
+WARCALC_FORMAT = (
+    "[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi/Canopy Lights/Dragon/6] "
+    "-- each force is 'count Type/Weapon/Armour/training', commas between forces on a "
+    "side, ' vs ' between the two sides. Weapon, armour and training may be left off."
+)
+
+
+def parse_force_list(text: str) -> List[Dict[str, Any]]:
+    """Parse one side of a WARCALC tag. Raises ToolError naming the format."""
+    forces = []
+    for chunk in str(text).split(","):
+        if not chunk.strip():
+            continue
+        match = _FORCE_RE.match(chunk)
+        if not match:
+            raise ToolError(
+                f"could not read {chunk.strip()!r} as a force. Format: {WARCALC_FORMAT}"
+            )
+        force = {
+            "name": chunk.strip(),
+            "type": match.group("type").strip().title(),
+            "size": int(match.group("size")),
+            "training": int(match.group("training") or 0),
+        }
+        for key in ("weapon", "armor"):
+            value = (match.group(key) or "").strip()
+            if value:
+                force[key] = value
+        forces.append(force)
+    if not forces:
+        raise ToolError(f"no forces given. Format: {WARCALC_FORMAT}")
+    return forces
+
+
+def run_warcalc_tag(body: str) -> str:
+    """Run a `[WARCALC:... vs ...]` tag body and report the result.
+
+    A parse failure comes back as the expected format rather than as an exception, so
+    she can correct herself on the next round rather than losing the turn.
+    """
+    text = str(body)
+    parts = re.split(r"\s+vs\.?\s+", text, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) != 2:
+        return (
+            f"error: needs two sides separated by ' vs '. Format: {WARCALC_FORMAT}"
+        )
+    try:
+        attackers = parse_force_list(parts[0])
+        defenders = parse_force_list(parts[1])
+    except ToolError as exc:
+        return f"error: {exc}"
+
+    # The defender bonus is on unless the attacker is told otherwise, because a
+    # defender is normally on their own soil -- that is what "defending" means here.
+    bonus = "nobonus" not in text.casefold() and "no bonus" not in text.casefold()
+    try:
+        return run_warcalc(attackers, defenders, bonus)
+    except Exception as exc:
+        logger.exception("Warcalc failed")
+        return f"error: {exc}"

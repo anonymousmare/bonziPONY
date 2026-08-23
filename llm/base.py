@@ -35,39 +35,6 @@ class LLMProvider(ABC):
         extraction) that should NOT be in-character.
         """
 
-    def call_with_tools(
-        self,
-        prompt: str,
-        tools: "list[dict]",
-        dispatch: "Callable[[str, dict], str]",
-        max_rounds: int = 5,
-        system_prompt: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-    ) -> str:
-        """Answer a prompt, calling tools as needed, and return the final text.
-
-        A separate method rather than a flag on ``chat``. ``chat`` returns ``str``, and a tool
-        loop has to return either something structured or the text after several round trips;
-        widening that signature would touch every provider and every call site for the sake of
-        one caller. This runs the whole loop internally and hands back only the words.
-
-        Like ``generate_once``, it does not touch conversation history: the tool traffic is
-        working-out, not something the character should later remember saying.
-
-        ``dispatch(name, arguments) -> str`` runs one tool and returns its result as text.
-        Raising from it is fine; the error is handed back to the model, which usually recovers
-        by trying something else.
-
-        Only implemented where the backend actually supports tool use.
-        """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support tool calling"
-        )
-
-    def supports_tools(self) -> bool:
-        """Whether ``call_with_tools`` will work on this provider."""
-        return type(self).call_with_tools is not LLMProvider.call_with_tools
-
     def has_history(self) -> bool:
         """Return True if there is any conversation history to summarize."""
         return False
