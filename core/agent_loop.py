@@ -1764,7 +1764,52 @@ class AgentLoop:
             sys_prompt = None
         raw = self._llm.generate_once(prompt, max_tokens=max_tokens,
                                        system_prompt=sys_prompt)
+        raw = self._resolve_lookups(raw, prompt, sys_prompt, max_tokens)
         return self._strip_think(raw).strip().strip('"').strip("'")
+
+    def _resolve_lookups(self, raw: str, prompt: str, sys_prompt, max_tokens: int) -> str:
+        """If she asked for real numbers, answer and let her try again.
+
+        The autonomous twin of Pipeline._resolve_lookups. Simpler, because generate_once
+        has no history to rewind -- the whole exchange is one prompt, so the answer is
+        just appended to it.
+
+        Bounded to one extra round: an unprompted remark is not worth three API calls,
+        and if she cannot say it with the numbers in hand she should say nothing.
+        """
+        from llm.response_parser import parse_response
+
+        parsed = parse_response(raw or "")
+        if not (parsed.lookups or parsed.warcalcs):
+            return raw
+
+        registry = self.clop_tools
+        if registry is None:
+            from core.clop_tools import ToolRegistry
+
+            registry = ToolRegistry(None)
+
+        results = []
+        for query in parsed.lookups:
+            results.append(f"[{query}]\n{registry.dispatch(query)}")
+        if parsed.warcalcs:
+            from core.clop_tools import run_warcalc_tag
+
+            for body in parsed.warcalcs:
+                results.append(f"[warcalc]\n{run_warcalc_tag(body)}")
+
+        answer = "\n\n".join(results)
+        logger.info("Autonomous lookup: %s", ", ".join(parsed.lookups + parsed.warcalcs))
+        try:
+            return self._llm.generate_once(
+                f"{prompt}\n\n[Looked up for you:\n\n{answer}\n\n"
+                f"Now say your line using these numbers. Do not ask for them again.]",
+                max_tokens=max_tokens,
+                system_prompt=sys_prompt,
+            )
+        except Exception as exc:
+            logger.warning("Autonomous lookup retry failed: %s", exc)
+            return raw
 
     def stop(self) -> None:
         """Signal this agent loop to stop. Called by PonyInstance.destroy()."""

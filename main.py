@@ -793,7 +793,11 @@ def main() -> None:
                 from core.clop_tools import ToolRegistry
 
                 agent_loop.clop_tools = ToolRegistry(clop_bridge)
-                logger.info("CLOP tools available: %s",
+                # The prompt block lists the live lookups only when they actually work.
+                from llm.prompt import set_lookup_registry
+
+                set_lookup_registry(agent_loop.clop_tools)
+                logger.info("CLOP lookups available: %s",
                             ", ".join(agent_loop.clop_tools.names))
 
                 # The hourly thread read, as a routine so it survives restarts through

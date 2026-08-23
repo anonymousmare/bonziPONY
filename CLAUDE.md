@@ -29,9 +29,9 @@ main.py (bootstrap + wiring)
   │       ├─ core/clop_thread.py       hourly 4chan read, gated before any LLM call
   │       └─ core/event_timeline.py    shared event log (thread-safe)
   │
-  ├─ CLOP Bridge Thread ─── 60s polls of the game, via the monitor checkout
+  ├─ CLOP Bridge Thread ─── 60s polls of the game, via the bundled monitor
   │       │
-  │       ├─ clop_monitor.check_and_notify()  (imported, not vendored)
+  │       ├─ clop_monitor/            vendored; on sys.path, not a package
   │       ├─ core/clop_unread.py       what was missed while the user was away
   │       └─ PetSink → PetController → NotificationBox
   │
@@ -73,7 +73,8 @@ main.py (bootstrap + wiring)
 | `pony_instance.py` | Per-character state bundle (GUI + LLM + sprites + config) | `PonyInstance` |
 | `clop_bridge.py` | Runs the CLOP monitor's poll loop in-process; alerts go to the box | `ClopBridge`, `PetSink` |
 | `clop_unread.py` | Unread notifications, deduplicated and persisted, for the catch-up | `UnreadStore` |
-| `clop_tools.py` | The 12 tools she can call instead of guessing | `ToolRegistry` |
+| `clop_tools.py` | The lookups she can ask for instead of guessing | `LOOKUPS`, `ToolRegistry` |
+| `clop_lore.py` | Game facts auto-injected when she mentions something | `context_for()` |
 | `clop_thread.py` | The hourly thread read and the cheap gate in front of it | `ThreadState`, `decide()` |
 | `warcalc.py` | Battle simulation, ported from the game's own combat loop | `simulate()`, `force_cost()` |
 | `routines.py` | Persistent scheduled actions (wake/sleep/daily/weekly/interval) | `RoutineManager` |
@@ -209,6 +210,8 @@ The LLM embeds structured tags in its natural language response. `response_parse
 | `[PERSIST:seconds]` | Hold animation N seconds | `[PERSIST:600]` |
 | `[MOVETO:region]` | Move pony to screen area | `[MOVETO:top_left]` |
 | `[RULE:description]` | Create standing behavioral rule | `[RULE:quit porn]` |
+| `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:pollution:Oil Fracker:14]` |
+| `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
 
 ## Directive System
 
@@ -306,14 +309,34 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
 17. **`gamedata.json` is generated, not hand-edited.** Regenerate with
     `python3 tools/export_gamedata.py` in the CLOP checkout and copy it to `data/`.
 
+18. **Lookups are a tag, not an API feature, on purpose.** Native function calling was
+    tried and removed. DeepSeek — which this is built to run on, via nano-gpt — emits tool
+    calls as plain text in `content` instead of `tool_calls` about 11% of the time, and
+    `OpenAIProvider` would swallow that into an empty string and corrupt `_history`. A tag
+    cannot fall through to text mode because text is the mode. Do not "upgrade" this to
+    `tools=`.
+
+19. **The lorebook guard is deliberate.** `clop_lore.AMBIGUOUS` names match
+    case-sensitively because `Nope`, `Wonder`, `Bar`, `Dragon` and `Titan` are all real
+    equipment *and* ordinary English. The set is kept tight: a false positive costs ~150
+    wasted tokens, a false negative costs her the numbers.
+
+20. **A nested match is skipped.** "coffee farm" is a Coffee Farm, not a Coffee Farm plus
+    some Coffee. `find_mentions` tracks claimed spans; sorting by length alone is not enough.
+
+21. **Two lookup paths, two shapes.** `Pipeline._resolve_lookups` rewinds `_history` (two
+    pops — `chat()` re-adds the user turn); `AgentLoop._resolve_lookups` has no history to
+    rewind because `generate_once` is one prompt. Both are round-bounded.
+
 ## Testing
 
-No test suite exists in this repo. Validate changes with:
 ```bash
-python -m py_compile <file.py>
+python -m unittest discover -s tests    # 24 tests: lorebook + lookup round trip
+cd clop_monitor && python -m unittest   # 593 tests: the monitor's own suite
+python -m py_compile <file.py>          # everything else
 ```
-The CLOP monitor checkout **does** have one (593 tests, `python -m unittest`), and it covers
-the alert parsing and rendering this app depends on. Run it after touching anything there.
+`tests/test_lookup_roundtrip.py` drives the lookup path with a hand-written stub provider
+and asserts `anthropic` was never imported — that is the claim it exists to protect.
 For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM → TTS stages individually.
 
 ## Persistent State Files
