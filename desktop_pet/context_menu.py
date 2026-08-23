@@ -573,77 +573,6 @@ class _AddRoutineDialog(QDialog):
 
 # ── Context menu builder ──────────────────────────────────────────────────
 
-class _CharacterPickerDialog(QDialog):
-    """Searchable dialog to pick from all available characters."""
-
-    def __init__(self, current_slug: str, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Select Character")
-        self.setMinimumWidth(350)
-        self.setMinimumHeight(500)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-
-        self._selected_slug: Optional[str] = None
-
-        layout = QVBoxLayout(self)
-
-        layout.addWidget(QLabel("Choose a character:"))
-        self._search = QLineEdit()
-        self._search.setPlaceholderText("Search characters...")
-        self._search.textChanged.connect(self._filter)
-        layout.addWidget(self._search)
-
-        self._list = QListWidget()
-        self._list.itemDoubleClicked.connect(self._on_double_click)
-        layout.addWidget(self._list)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-        # Populate
-        from core.character_registry import get_all_characters
-        self._all_chars = get_all_characters()
-        self._populate(current_slug)
-
-    def _populate(self, current_slug: str) -> None:
-        self._list.clear()
-        scroll_to: Optional[QListWidgetItem] = None
-        for info in self._all_chars:
-            label = info.display_name
-            if info.has_custom_preset:
-                label += "  \u2605"  # star for custom presets
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, info.slug)
-            self._list.addItem(item)
-            if info.slug == current_slug:
-                item.setSelected(True)
-                scroll_to = item
-        if scroll_to:
-            self._list.setCurrentItem(scroll_to)
-            self._list.scrollToItem(scroll_to)
-
-    def _filter(self, text: str) -> None:
-        text_lower = text.lower()
-        for i in range(self._list.count()):
-            item = self._list.item(i)
-            item.setHidden(text_lower not in item.text().lower())
-
-    def _on_double_click(self, item: QListWidgetItem) -> None:
-        self._selected_slug = item.data(Qt.UserRole)
-        self.accept()
-
-    def _on_accept(self) -> None:
-        item = self._list.currentItem()
-        if item and not item.isHidden():
-            self._selected_slug = item.data(Qt.UserRole)
-            self.accept()
-
-    def get_selected_slug(self) -> Optional[str]:
-        return self._selected_slug
-
-
 class _OOCDialog(QDialog):
     """Dialog to send an out-of-character message to the LLM."""
 
@@ -694,7 +623,6 @@ class ContextMenuBuilder:
         agent_loop: Optional[AgentLoop] = None,
         llm_provider: Optional[LLMProvider] = None,
         on_scale_change: Optional[Callable[[float], None]] = None,
-        on_character_change: Optional[Callable[[str], None]] = None,
         on_quit: Optional[Callable[[], None]] = None,
         ack_player=None,
         on_provider_change: Optional[Callable[[str], None]] = None,
@@ -710,7 +638,6 @@ class ContextMenuBuilder:
         self.agent_loop = agent_loop
         self.llm = llm_provider
         self.on_scale_change = on_scale_change
-        self.on_character_change = on_character_change
         self.on_quit = on_quit
         self.ack_player = ack_player
         self.on_provider_change = on_provider_change
@@ -919,10 +846,7 @@ class ContextMenuBuilder:
         else:
             vlm_menu.addAction("(not configured)").setEnabled(False)
 
-        # ── Character picker ──────────────────────────────────────────
-        from llm.prompt import get_character_name
-        char_act = menu.addAction(f"Character: {get_character_name()}...")
-        char_act.triggered.connect(lambda: self._show_character_picker(parent))
+        # ── Personality ───────────────────────────────────────────────
         edit_personality_act = menu.addAction("Edit Personality...")
         edit_personality_act.triggered.connect(self._edit_personality)
         open_presets_act = menu.addAction("Open Presets Folder")
@@ -984,11 +908,6 @@ class ContextMenuBuilder:
         # ── Audio Devices submenu ─────────────────────────────────────
         audio_menu = menu.addMenu("Audio Devices (restart needed)")
         self._build_audio_submenu(audio_menu)
-
-        # ── Multi-pony ─────────────────────────────────────────────────
-        if self.pony_manager is not None:
-            menu.addSeparator()
-            self._build_multi_pony_menu(menu, parent)
 
         # ── Presentation Mode (secret) ────────────────────────────────
         if cfg.presentation_mode:
@@ -1499,20 +1418,6 @@ class ContextMenuBuilder:
             self.on_scale_change(scale)
         logger.info("Scale changed to: %.1f", scale)
 
-    def _show_character_picker(self, parent: QWidget) -> None:
-        """Open the character picker dialog."""
-        from llm.prompt import get_active_preset
-        dlg = _CharacterPickerDialog(get_active_preset(), parent)
-        if dlg.exec_() == QDialog.Accepted:
-            slug = dlg.get_selected_slug()
-            if slug and slug != get_active_preset():
-                self._apply_character(slug)
-
-    def _apply_character(self, preset_slug: str) -> None:
-        """Hot-swap the active character."""
-        if self.on_character_change:
-            self.on_character_change(preset_slug)
-
     def _apply_relationship(self, slug: str) -> None:
         """Switch relationship mode."""
         self.config.llm.relationship = slug
@@ -1583,11 +1488,6 @@ class ContextMenuBuilder:
 
         menu.addSeparator()
 
-        # Multi-pony controls (Add / Remove)
-        if self.pony_manager is not None:
-            self._build_multi_pony_menu(menu, parent)
-            menu.addSeparator()
-
         # Scale submenu (shared)
         cfg = self.config
         self._radio_submenu(menu, "Scale", [
@@ -1606,71 +1506,6 @@ class ContextMenuBuilder:
         return menu
 
     # ── Multi-pony menu builders ─────────────────────────────────────────
-
-    def _build_multi_pony_menu(self, menu: QMenu, parent: QWidget) -> None:
-        """Add the 'Add Pony' submenu and optional 'Remove This Pony' action."""
-        mgr = self.pony_manager
-        if mgr is None:
-            return
-
-        # ── Add Pony submenu ──
-        add_menu = menu.addMenu("Add Pony")
-
-        # Quick-add: the 6 mane characters (minus any already active)
-        mane_six = [
-            ("Twilight Sparkle", "twilight_sparkle"),
-            ("Rainbow Dash", "rainbow_dash"),
-            ("Pinkie Pie", "pinkie_pie"),
-            ("Rarity", "rarity"),
-            ("Fluttershy", "fluttershy"),
-            ("Applejack", "applejack"),
-        ]
-        for display, slug in mane_six:
-            act = add_menu.addAction(display)
-            act.triggered.connect(lambda checked, s=slug: self._add_pony(s))
-            if len(mgr.ponies) >= mgr.max_ponies:
-                act.setEnabled(False)
-
-        add_menu.addSeparator()
-        browse_act = add_menu.addAction("Browse All...")
-        browse_act.triggered.connect(lambda: self._browse_add_pony(parent))
-        if len(mgr.ponies) >= mgr.max_ponies:
-            browse_act.setEnabled(False)
-
-        # ── Remove This Pony (only for secondaries) ──
-        inst = self.pony_instance
-        if inst and not inst.is_primary:
-            remove_act = menu.addAction(f"Remove {inst.display_name}")
-            remove_act.triggered.connect(lambda: self._remove_pony(inst))
-
-        # ── Show pony count ──
-        count_act = menu.addAction(f"Ponies: {len(mgr.ponies)}/{mgr.max_ponies}")
-        count_act.setEnabled(False)
-
-    def _add_pony(self, slug: str) -> None:
-        """Add a secondary pony via PonyManager."""
-        mgr = self.pony_manager
-        if mgr is None:
-            return
-        instance = mgr.add_pony(slug)
-        if instance is None:
-            logger.warning("Could not add pony: %s (at capacity?)", slug)
-
-    def _browse_add_pony(self, parent: QWidget) -> None:
-        """Open the full character picker to add any character."""
-        dlg = _CharacterPickerDialog("", parent)
-        dlg.setWindowTitle("Add Pony")
-        if dlg.exec_() == QDialog.Accepted:
-            slug = dlg.get_selected_slug()
-            if slug:
-                self._add_pony(slug)
-
-    def _remove_pony(self, instance) -> None:
-        """Remove a secondary pony via PonyManager."""
-        mgr = self.pony_manager
-        if mgr is None:
-            return
-        mgr.remove_pony(instance)
 
     def _open_ack_folder(self) -> None:
         """Open the current character's acknowledgement sounds folder."""
@@ -1697,24 +1532,6 @@ class ContextMenuBuilder:
         demo_act.triggered.connect(self._toggle_live_demo)
         demo_act.setEnabled(self.agent_loop is not None)
 
-        pres_menu.addSeparator()
-
-        # Trigger Group Chat — immediate inter-pony banter
-        chat_act = pres_menu.addAction("Trigger Group Chat")
-        chat_act.triggered.connect(self._force_group_chat)
-        chat_act.setEnabled(self.pony_manager is not None and len(self.pony_manager.ponies) >= 2)
-
-        # Spawn Mane Six — fill the desktop with ponies
-        spawn_act = pres_menu.addAction("Spawn Mane Six")
-        spawn_act.triggered.connect(self._spawn_mane_six)
-        spawn_act.setEnabled(self.pony_manager is not None)
-
-        pres_menu.addSeparator()
-
-        # CHAOS MODE — the big red button
-        chaos_act = pres_menu.addAction("DESTROY PC")
-        chaos_act.triggered.connect(self._chaos_mode)
-        chaos_act.setEnabled(self.pony_manager is not None)
 
     def _toggle_force_afk(self) -> None:
         """Toggle forced AFK state for presentation mode."""
@@ -1729,60 +1546,6 @@ class ContextMenuBuilder:
             return
         new_state = self.agent_loop.toggle_live_demo()
         logger.info("Presentation: Live Demo toggled to %s", new_state)
-
-    def _force_group_chat(self) -> None:
-        """Immediately trigger a group conversation."""
-        if not self.pony_manager:
-            return
-        self.pony_manager.force_spontaneous_chat()
-
-    def _spawn_mane_six(self) -> None:
-        """Spawn all mane six ponies that aren't already on screen."""
-        if not self.pony_manager:
-            return
-        mane_six = ["twilight_sparkle", "rainbow_dash", "pinkie_pie",
-                     "rarity", "fluttershy", "applejack"]
-        existing = {p.slug for p in self.pony_manager.ponies}
-        for slug in mane_six:
-            if slug not in existing and len(self.pony_manager.ponies) < self.pony_manager.max_ponies:
-                self.pony_manager.add_pony(slug)
-
-    def _chaos_mode(self) -> None:
-        """DESTROY PC — spawn ponies, open chaotic tabs, start themed group convo."""
-        if not self.pony_manager:
-            return
-        # Spawn ponies on main thread (Qt widgets must be created here)
-        self._spawn_mane_six()
-        # Open chaotic tabs + group convo in background (safe for threads)
-        import threading
-        def _run_chaos():
-            import webbrowser
-            chaos_urls = [
-                "https://www.youtube.com/results?search_query=fire+explosion+compilation",
-                "https://www.youtube.com/results?search_query=bonzibuddy+virus+meme",
-                "https://www.youtube.com/results?search_query=nuclear+explosion+4k",
-                "https://www.youtube.com/results?search_query=windows+xp+destruction",
-                "https://www.youtube.com/results?search_query=dank+memes+compilation",
-                "https://www.youtube.com/results?search_query=mlp+chaos+discord",
-                "https://en.wikipedia.org/wiki/BonziBuddy",
-                "https://www.reddit.com/r/softwaregore",
-            ]
-            for url in chaos_urls:
-                try:
-                    webbrowser.open(url)
-                except Exception:
-                    pass
-                import time
-                time.sleep(0.3)
-            import time
-            time.sleep(1.0)
-            self.pony_manager.force_spontaneous_chat(
-                topic="HEY GIRLS! We're destroying this guy's desktop! Open stuff, cause chaos, "
-                      "talk about what you're doing, coordinate the destruction! GO GO GO!"
-            )
-            logger.info("CHAOS MODE — %d tabs opened, %d ponies active",
-                         len(chaos_urls), len(self.pony_manager.ponies))
-        threading.Thread(target=_run_chaos, daemon=True).start()
 
     # ── Memory reset ─────────────────────────────────────────────────────
 

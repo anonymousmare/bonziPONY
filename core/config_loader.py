@@ -157,6 +157,11 @@ class DesktopPetConfig:
     speech_bubble: bool = True
     font_style: str = "default"        # "default" (Segoe UI) | "m5x7" (pixel)
     typewriter_sound: bool = True      # click-click while bubble types
+    #: Screen region to hold, or None to let her wander as a desktop pet normally does.
+    #: An advisor that relays notifications wants to be findable in the same place every
+    #: time, and the notification box is drawn directly above her.
+    pin_to: Optional[str] = "bottom_right"
+    pin_margin: int = 12               # pixels from the screen's work-area edge
 
 
 @dataclass
@@ -166,16 +171,6 @@ class SafetyConfig:
     (LOCK_MOUSE/MESS_MOUSE/ALT_TAB), standing-rule window closing, desktop
     command dispatch, updater, and cloud LLM/TTS providers."""
     read_only_mode: bool = False
-
-
-@dataclass
-class MultiPonyConfig:
-    max_ponies: int = 3
-    inter_pony_chat: bool = True
-    chat_interval_s: float = 600.0        # seconds between spontaneous inter-pony chats
-    max_chat_depth: int = 6               # max exchanges per conversation chain
-    piggyback_chance: float = 0.30        # chance each other pony jumps in after a response
-    secondary_ponies: List[str] = field(default_factory=list)  # auto-load on startup
 
 
 @dataclass
@@ -195,7 +190,6 @@ class AppConfig:
     watch_mode: WatchModeConfig = None
     tts: TTSConfig = None
     vision_llm: VisionLLMConfig = None
-    multi_pony: MultiPonyConfig = None
     safety: SafetyConfig = None
     auto_update: bool = False              # auto-pull git updates on launch (off by default)
     presentation_mode: bool = False        # secret: unlocks demo/presentation menu
@@ -213,8 +207,6 @@ class AppConfig:
             self.watch_mode = WatchModeConfig()
         if self.vision_llm is None:
             self.vision_llm = VisionLLMConfig()
-        if self.multi_pony is None:
-            self.multi_pony = MultiPonyConfig()
         if self.safety is None:
             self.safety = SafetyConfig()
 
@@ -271,7 +263,6 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
     wm_raw = raw.get("watch_mode", {})
     tts_raw = raw.get("tts", {})
     vlm_raw = raw.get("vision_llm", {})
-    mp_raw = raw.get("multi_pony", {})
     safety_raw = raw.get("safety", {})
     auto_update = bool(raw.get("auto_update", False))
     presentation_mode = raw.get("presentation_mode", False)
@@ -347,6 +338,8 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             speech_bubble=pet_raw.get("speech_bubble", True),
             font_style=pet_raw.get("font_style", "default"),
             typewriter_sound=pet_raw.get("typewriter_sound", True),
+            pin_to=pet_raw.get("pin_to", "bottom_right"),
+            pin_margin=pet_raw.get("pin_margin", 12),
         ),
         desktop_control=DesktopControlConfig(
             enabled=dc_raw.get("enabled", True),
@@ -388,14 +381,6 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             sample_rate=tts_raw.get("sample_rate", 24000),
         ),
         vision_llm=_parse_vision_llm(vlm_raw or None),
-        multi_pony=MultiPonyConfig(
-            max_ponies=mp_raw.get("max_ponies", 3),
-            inter_pony_chat=mp_raw.get("inter_pony_chat", True),
-            chat_interval_s=mp_raw.get("chat_interval_s", 600.0),
-            max_chat_depth=mp_raw.get("max_chat_depth", 6),
-            piggyback_chance=mp_raw.get("piggyback_chance", 0.30),
-            secondary_ponies=mp_raw.get("secondary_ponies", []),
-        ),
         safety=SafetyConfig(
             read_only_mode=bool(safety_raw.get("read_only_mode", False)),
         ),

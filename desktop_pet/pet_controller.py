@@ -10,14 +10,19 @@ from robot.actions import RobotAction
 
 logger = logging.getLogger(__name__)
 
-# Pipeline state → sprite animation name
+# Pipeline state → sprite animation name.
+#
+# These are canonical names from SpriteManager._KEYWORD_MAP, and a name the
+# character has no behavior for silently falls back to "stand" — so a map full of
+# animations Twilight does not have would render every state identically without
+# ever saying so. She has three: stand, read (read.gif) and alert (windblown).
 _STATE_ANIMATION_MAP = {
     "IDLE": None,           # Clear override, return to roaming
-    "ACKNOWLEDGE": "beep",
-    "LISTEN": "hover",
-    "THINK": "dizzy",
+    "ACKNOWLEDGE": "alert",  # Mane lifts as she looks up
+    "LISTEN": "stand",
+    "THINK": "read",        # Nose in a book while the model works
     "SPEAK": "stand",       # Stand still while talking — no movement
-    "ERROR": "dizzy",
+    "ERROR": "alert",
 }
 
 # Robot action → sprite animation name

@@ -562,15 +562,8 @@ class Pipeline:
             original_user_text = user_text  # save before injections for heuristic check
             self._remember_topic(user_text)
 
-            # Fix 6: Inject user speech into active group conversation + interrupt it
             # Fix 10: Route speech to the named pony, swap LLM for this turn
             if self.pony_manager:
-                if self.pony_manager._active_convo is not None:
-                    try:
-                        self.pony_manager._active_convo.inject_user(original_user_text)
-                        self.pony_manager._active_convo.interrupted = True
-                    except Exception:
-                        pass
                 if len(self.pony_manager.ponies) > 1:
                     try:
                         target = self.pony_manager.route_user_speech(original_user_text)
@@ -913,17 +906,6 @@ class Pipeline:
                     from core.event_timeline import EventType
                     self._timeline.append(EventType.PONY_SAID,
                                           f'Pony replied: "{parsed.text[:150]}"')
-                # Offer piggyback to other ponies after user response
-                if self.pony_manager and len(self.pony_manager.ponies) > 1:
-                    try:
-                        _responder = _target or self.pony_manager.primary
-                        self.pony_manager.offer_piggyback(
-                            _responder,
-                            original_user_text or "",
-                            parsed.text,
-                        )
-                    except Exception as exc:
-                        logger.debug("Piggyback offer failed: %s", exc)
                 return True
             return False
 

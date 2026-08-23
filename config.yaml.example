@@ -27,7 +27,7 @@ llm:
   max_tokens: 1500
   max_history_turns: 10
   base_url: null               # auto-detected for known providers; set for custom endpoints (e.g. "http://localhost:1234/v1")
-  preset: "rainbow_dash"       # filename in presets/ folder (no .txt)
+  preset: "twilight_sparkle"   # filename in presets/ folder (no .txt)
   relationship: "lover"        # lover | best_friend | roommate | caretaker | custom
   # relationship_custom: ""   # free-text (only used when relationship is "custom")
   # prefill: ""               # custom first-turn prefill. {name} = character name. blank = default
@@ -91,6 +91,12 @@ desktop_pet:
   enabled: true
   scale: 2.0                  # sprite scale factor (originals are ~100px)
   speech_bubble: true          # show text bubbles alongside TTS
+  pin_to: "bottom_right"       # hold one corner instead of wandering.
+                               # bottom_right | bottom_left | top_right | top_left | center
+                               # | left | right | top | bottom, or null to roam freely.
+                               # The notification box is drawn directly above her, so a
+                               # bottom corner leaves the most room for it.
+  pin_margin: 12               # pixels from the screen work area (taskbar excluded)
 
 tts:
   enabled: true
