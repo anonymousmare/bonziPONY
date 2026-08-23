@@ -788,6 +788,13 @@ def main() -> None:
             if agent_loop:
                 agent_loop.clop_unread = clop_unread
                 agent_loop.clop_bridge = clop_bridge
+                # Live tools are only registered while the bridge is connected; offering a
+                # tool that cannot work earns a confident answer built on an error string.
+                from core.clop_tools import ToolRegistry
+
+                agent_loop.clop_tools = ToolRegistry(clop_bridge)
+                logger.info("CLOP tools available: %s",
+                            ", ".join(agent_loop.clop_tools.names))
             logger.info("CLOP bridge running — polling every %ds", clop_cfg.poll_interval_s)
         else:
             clop_bridge = None

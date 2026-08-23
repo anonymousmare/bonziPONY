@@ -303,6 +303,22 @@ class ClopBridge:
             html, _stock = self.monitor.read_overview_stockpiles(self.client)
         return html
 
+    def market_orders(self) -> List[Any]:
+        """Pending buy orders for the goods the monitor is configured to watch.
+
+        Only watched goods: the buyer's market is queried one good at a time with a CSRF
+        token, so "all of them" would be thirty-one POSTs per ask. Which goods are watched
+        lives in the monitor's settings.json under market.goods.
+        """
+        self._require()
+        with self.lock:
+            roster = (
+                self.client._alliance_roster()
+                if self.client.alliance_id is not None
+                else None
+            )
+            return list(self.client._market_orders(roster))
+
     def thread_posts(self) -> List[Any]:
         """Every post in the configured 4chan thread."""
         self._require()

@@ -476,3 +476,22 @@ librosa              # Audio features
 ## Platform
 
 Windows only. Depends on `pywin32` for window manipulation, `win32gui` for idle time detection, and Win32 APIs for desktop control and screen monitoring.
+
+## Refreshing the CLOP game data
+
+`data/gamedata.json` is generated from the game's own SQL. It is what stops the character
+inventing building costs. To refresh it after a game content change:
+
+```bash
+cd ../CLOP
+python3 tools/export_gamedata.py     # reads clop/tables with data.sql, writes gamedata.json
+cp gamedata.json ../bonziPONY/data/gamedata.json
+```
+
+`python3 tools/export_gamedata.py --check` verifies the committed file is current without
+rewriting it.
+
+The export resolves several traps in the raw tables that a naive read gets wrong — `satisfaction`
+means one thing in `recipes` and another in `resourcedefs`, `is_used_up = 0` means "must own, not
+consumed", and three buildings have descriptions that contradict their own columns. Its
+`_meta.warnings` lists them.

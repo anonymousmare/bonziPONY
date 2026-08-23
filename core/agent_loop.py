@@ -363,6 +363,9 @@ class AgentLoop:
         self.clop_unread = None
         #: core.clop_bridge.ClopBridge, set by main.py. Used by the hourly thread check.
         self.clop_bridge = None
+        #: core.clop_tools.ToolRegistry, set by main.py. What she can look up rather than
+        #: guess at. Live tools are only in it while the bridge is connected.
+        self.clop_tools = None
         self._desktop = desktop_controller
         self._robot = robot
         self._detector = detector
