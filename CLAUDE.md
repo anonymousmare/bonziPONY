@@ -1,6 +1,11 @@
 # CLAUDE.md — bonziPONY Codebase Guide
 
-AI-powered Windows desktop pet: voice interaction, autonomous behavior, screen monitoring, desktop control, multi-pony system. Built on PyQt5, Whisper STT, ElevenLabs/PVT TTS, and multiple LLM backends.
+AI-powered Windows desktop pet, built as a 4CLOP advisor: voice interaction, autonomous
+behavior, screen monitoring, desktop control, and an embedded game monitor. Built on PyQt5,
+Whisper STT, ElevenLabs/PVT TTS, and multiple LLM backends.
+
+Single character (Twilight Sparkle, unicorn), pinned to a screen corner. The multi-pony
+system it was built on has been removed.
 
 ## Architecture Overview
 
@@ -21,7 +26,14 @@ main.py (bootstrap + wiring)
   │       ├─ core/screen_monitor.py    free window title polling (no LLM)
   │       ├─ directives.json           persistent tasks with urgency 1-10
   │       ├─ core/routines.py          scheduled recurring actions
+  │       ├─ core/clop_thread.py       hourly 4chan read, gated before any LLM call
   │       └─ core/event_timeline.py    shared event log (thread-safe)
+  │
+  ├─ CLOP Bridge Thread ─── 60s polls of the game, via the monitor checkout
+  │       │
+  │       ├─ clop_monitor.check_and_notify()  (imported, not vendored)
+  │       ├─ core/clop_unread.py       what was missed while the user was away
+  │       └─ PetSink → PetController → NotificationBox
   │
   ├─ TTSQueue Consumer Thread ─── serialized audio playback
   │       │
@@ -32,6 +44,7 @@ main.py (bootstrap + wiring)
           ├─ desktop_pet/pet_window.py     sprite animation (~60fps)
           ├─ desktop_pet/speech_bubble.py  comic-style response display
           ├─ desktop_pet/heard_text.py     STT transcription overlay
+          ├─ desktop_pet/notification_box.py  relayed CLOP alerts, clickable
           └─ desktop_pet/context_menu.py   right-click settings UI
 ```
 
@@ -55,10 +68,14 @@ main.py (bootstrap + wiring)
 |------|------|-----------|
 | `pipeline.py` | Conversation state machine (wake→listen→think→speak) | `Pipeline` |
 | `agent_loop.py` | Autonomous behavior, directives, enforcement, AFK mischief | `AgentLoop` |
-| `tts_queue.py` | Priority-ordered multi-pony audio serialization | `TTSQueue` |
-| `pony_manager.py` | Multi-pony lifecycle, voice routing, group chat scheduling | `PonyManager` |
-| `pony_instance.py` | Per-pony state bundle (GUI + LLM + sprites + config) | `PonyInstance` |
-| `group_conversation.py` | Inter-pony turn-taking conversations | `GroupConversation` |
+| `tts_queue.py` | Priority-ordered audio serialization | `TTSQueue` |
+| `pony_manager.py` | One-element holder for the active character | `PonyManager` |
+| `pony_instance.py` | Per-character state bundle (GUI + LLM + sprites + config) | `PonyInstance` |
+| `clop_bridge.py` | Runs the CLOP monitor's poll loop in-process; alerts go to the box | `ClopBridge`, `PetSink` |
+| `clop_unread.py` | Unread notifications, deduplicated and persisted, for the catch-up | `UnreadStore` |
+| `clop_tools.py` | The 12 tools she can call instead of guessing | `ToolRegistry` |
+| `clop_thread.py` | The hourly thread read and the cheap gate in front of it | `ThreadState`, `decide()` |
+| `warcalc.py` | Battle simulation, ported from the game's own combat loop | `simulate()`, `force_cost()` |
 | `routines.py` | Persistent scheduled actions (wake/sleep/daily/weekly/interval) | `RoutineManager` |
 | `event_timeline.py` | Shared event log bridging Pipeline and AgentLoop | `EventTimeline` |
 | `screen_monitor.py` | Win32 window title polling (free, no API calls) | `ScreenMonitor` |
@@ -93,7 +110,8 @@ main.py (bootstrap + wiring)
 | `effect_renderer.py` | Overlay visual effects (Sonic Rainboom, etc.) |
 | `speech_bubble.py` | Comic-style bubble with typing animation, auto-hide, position tracking |
 | `heard_text.py` | Translucent STT transcription overlay below pony |
-| `context_menu.py` | Right-click menu: full in-app settings, character switching, directive viewer |
+| `notification_box.py` | Clickable alert panel above the pony, with a coloured trim and mark-as-read |
+| `context_menu.py` | Right-click menu: full in-app settings, directive viewer |
 | `countdown_timer.py` | On-screen timer widget for enforcement tasks |
 
 ### stt/ — Speech-to-text
@@ -149,13 +167,27 @@ AgentLoop.tick()
   → _listen_for_reply()                      # wait for user response
 ```
 
-### Multi-pony group chat
+### CLOP alert → notification box
 ```
-PonyManager.trigger_inter_pony_chat()
-  → GroupConversation.start(initiator)
-    → For each turn: pony.llm.generate_once(turn_prompt)
-    → TTSQueue.enqueue(text, priority=PRIORITY_SPONTANEOUS_CHAT)
-    → Stop on [PASS] or max_depth reached
+ClopBridge poll thread (60s)
+  → clop_monitor.check_and_notify(client, previous, PetSink, ...)
+    → build_alerts(previous, current)      # pure; no Windows, no I/O
+    → PetSink.notify(message, alerts)
+      → alert_parts(alert)                 # {title, body, url, category, colour}
+      → UnreadStore.add(payload)           # deduplicated; level alerts re-fire every poll
+      → PetController.on_notification(payload)
+        → notification_received signal (QueuedConnection)
+          → NotificationBox.push(payload)  # main thread
+```
+
+### Hourly thread check
+```
+AgentLoop.tick() → _check_routines()
+  → routine goal "__task:clop_thread"      # not a directive; background work
+    → _check_clop_thread() on its own thread
+      → clop_thread.decide(state, posts)   # cheap gate: arithmetic, no model
+      → (only if it says read) sanitize + render new posts → generate_once
+      → speak, or [PASS] and stay silent
 ```
 
 ## LLM Response Tag System
@@ -213,7 +245,7 @@ All providers implement `LLMProvider` (llm/base.py):
 - `blocking=False` (default) → fire-and-forget enqueue
 - Pipeline user-response: always blocking
 - Agent loop `_speak()`: blocking (to prevent IDLE state race)
-- Group conversation: non-blocking (turns managed by GroupConversation)
+- Notification relay: `PRIORITY_NOTIFICATION`, non-blocking (blocking would tie the monitor thread to playback speed)
 
 ### Echo detection
 Pipeline tracks `_recently_spoken` list. When Whisper transcribes the pony's own TTS output back through the mic, it's filtered by substring match + word overlap (>60% threshold).
@@ -246,12 +278,42 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
 
 10. **Agent loop is silenced during conversation**: When `_conversation_active` is True, the agent loop skips all speech. Pipeline sets this flag. If you add a new speech path in agent_loop, check this flag.
 
+11. **Pinning is not "roaming off"**: the behavior-duration check lives inside the roaming
+    branch of `PetWindow._on_tick`, so clearing `_roaming` freezes her on one animation
+    forever. `_pinned` replaces `_move_tick` instead, and re-asserts every tick because the
+    window resizes itself to each animation frame and is anchored top-left.
+
+12. **`_STATE_ANIMATION_MAP` names must exist**: a missing animation silently falls back to
+    `stand`, so a map full of animations the character lacks renders every state identically
+    without ever erroring.
+
+13. **Two alert kinds are level-triggered**: unread-message counts and market buy orders
+    re-fire on *every* monitor poll while the condition holds, not once when it starts.
+    Anything accumulating them must deduplicate, and must count distinct items rather than
+    arrivals. `core/clop_unread.py` does both.
+
+14. **`PetSink.notify` must return False**: the monitor reads True as "a blocking dialog was
+    shown and dismissed" and re-reads its snapshot on that basis.
+
+15. **Interval routines are exempt from the once-a-day guard** in `routines.py`. That guard
+    is for wall-clock schedules; applying it to an interval made hourly routines fire once
+    near midnight and then die until the next day.
+
+16. **Thread posts are attacker-controlled**: sanitize before they reach a prompt, the same
+    way window titles are. `core/clop_thread.sanitize` strips control chars and bracket
+    expressions so a tag in a post cannot become a command.
+
+17. **`gamedata.json` is generated, not hand-edited.** Regenerate with
+    `python3 tools/export_gamedata.py` in the CLOP checkout and copy it to `data/`.
+
 ## Testing
 
-No test suite exists. Validate changes with:
+No test suite exists in this repo. Validate changes with:
 ```bash
 python -m py_compile <file.py>
 ```
+The CLOP monitor checkout **does** have one (593 tests, `python -m unittest`), and it covers
+the alert parsing and rendering this app depends on. Run it after touching anything there.
 For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM → TTS stages individually.
 
 ## Persistent State Files
