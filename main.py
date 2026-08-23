@@ -785,6 +785,14 @@ def main() -> None:
             # does not quietly swallow what nobody has read yet.
             for _item in clop_unread.items:
                 pet_controller.on_notification(_item)
+            # What she already knows about other nations. Kept next to directives.json and
+            # routines.json -- it is the same kind of thing: state that outlives the run.
+            _dossier = clop_bridge.dossier
+            logger.info(
+                "CLOP dossier %s: %d nation(s) read, %d alliance(s), %d awaiting a look",
+                _dossier.path.name, len(_dossier.nations), len(_dossier.alliances),
+                len(_dossier.pending()),
+            )
             if agent_loop:
                 agent_loop.clop_unread = clop_unread
                 agent_loop.clop_bridge = clop_bridge

@@ -33,6 +33,7 @@ main.py (bootstrap + wiring)
   │       │
   │       ├─ clop_monitor/            vendored; on sys.path, not a package
   │       ├─ core/clop_unread.py       what was missed while the user was away
+  │       ├─ core/clop_dossier.py      what she has learned about other nations
   │       └─ PetSink → PetController → NotificationBox
   │
   ├─ TTSQueue Consumer Thread ─── serialized audio playback
@@ -76,6 +77,7 @@ main.py (bootstrap + wiring)
 | `clop_tools.py` | The lookups she can ask for instead of guessing | `LOOKUPS`, `ToolRegistry` |
 | `clop_lore.py` | Game facts auto-injected when she mentions something | `context_for()` |
 | `clop_thread.py` | The hourly thread read and the cheap gate in front of it | `ThreadState`, `decide()` |
+| `clop_dossier.py` | What she has learned about other nations, persisted and stamped | `DossierStore`, `store()` |
 | `warcalc.py` | Battle simulation, ported from the game's own combat loop | `simulate()`, `force_cost()` |
 | `routines.py` | Persistent scheduled actions (wake/sleep/daily/weekly/interval) | `RoutineManager` |
 | `event_timeline.py` | Shared event log bridging Pipeline and AgentLoop | `EventTimeline` |
@@ -137,6 +139,8 @@ main.py (bootstrap + wiring)
 | `vision/camera.py` | Webcam capture via OpenCV |
 | `vision/watch_mode.py` | CLIP + OCR continuous screen understanding (zero API cost) |
 | `acknowledgement/player.py` | Plays per-character beep/chime on wake word detection |
+| `clop_monitor/clop_pages.py` | Parsers for `viewnation.php`, `viewalliance.php`, `messages.php`, `news.php` |
+| `clop_monitor/fixtures/` | Page HTML rendered by the game's own PHP templates, plus the generators |
 | `presets/` | Character personality .txt files (system prompts). `_template.txt` for auto-generation |
 | `Ponies/` | 311+ Desktop Ponies sprite packs (pony.ini + GIFs) |
 | `memory/` | `user_profile.txt`, `user_events.txt`, `sessions.txt` |
@@ -179,6 +183,18 @@ ClopBridge poll thread (60s)
       → PetController.on_notification(payload)
         → notification_received signal (QueuedConnection)
           → NotificationBox.push(payload)  # main thread
+  → _notice_market_nations(current)
+    → dossier.notice(order.nation_id, ...)   # from the snapshot, not the alert text
+```
+
+### Reading another nation
+```
+[LOOKUP:nation:47]
+  → ToolRegistry.dispatch → get_nation("47")
+    → dossier fresh?  → render the stored reading, no fetch
+    → otherwise ClopBridge.nation(47) → clop_pages.parse_nation(html)
+      → dossier.record_nation(nation)
+        → Force.as_warcalc() feeds core.warcalc.simulate directly
 ```
 
 ### Hourly thread check
@@ -212,6 +228,13 @@ The LLM embeds structured tags in its natural language response. `response_parse
 | `[RULE:description]` | Create standing behavioral rule | `[RULE:quit porn]` |
 | `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:pollution:Oil Fracker:14]` |
 | `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
+
+The lookups themselves are listed by `ToolRegistry.prompt_block()`, generated from `LOOKUPS`
+so the prompt can never offer one that is switched off or whose bridge is down. Live ones
+(`stockpiles`, `status`, `market`, `thread`, `nation`, `alliance`, `messages`,
+`alliance_messages`, `news`) need the bridge connected; `dossier` reads a file, so it still
+answers when the game is unreachable — which is when knowing what she already learned is
+most useful.
 
 ## Directive System
 
@@ -328,15 +351,44 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     pops — `chat()` re-adds the user turn); `AgentLoop._resolve_lookups` has no history to
     rewind because `generate_once` is one prompt. Both are round-bounded.
 
+22. **`messages.php` is safe to read; `myalliance.php` is not.** Personal messages only flip
+    `is_read` on a POST (`backend_messages.php:108-112`), so fetching the inbox changes
+    nothing. Alliance chat marks itself read on the GET
+    (`backend_myalliance.php:231`) — for the account, so it looks read in the user's own
+    browser too. That is why `read_alliance_messages` exists as a config flag and why
+    `alliance_messages` is the one lookup that can be switched off entirely.
+
+23. **The page fixtures are PHP-generated, not hand-written.** `clop_monitor/fixtures/*.html`
+    come from the game's own templates via `gen_nation.php` / `gen_rest.php`; see the
+    README there for how to regenerate them. A hand-written fixture only proves the parser
+    agrees with whoever wrote the fixture.
+
+24. **Never derive another nation's economy from its building counts.** `viewnation.php`
+    renders a Generated / Used / Net table that the game computes itself, government upkeep
+    included — which no count of buildings can see. `Nation.economy_rows` is that table.
+    The fixture pins `Gasoline (0, 10, -10)`: nothing on the page produces or consumes it.
+
+25. **A hostile force on a nation page is not part of its defence.** `viewnation.php` lists
+    occupying armies alongside the garrison. `Force.hostile` separates them, and anything
+    feeding `warcalc.simulate` must filter on it or it will count the invaders as defenders.
+
+26. **`clop_dossier.store()` only applies `max_age_hours` when asked.** The bridge sets it
+    from config; the lookup layer asks for the store with no opinion. An unconditional
+    assignment there quietly reset a configured staleness window back to the default.
+
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 24 tests: lorebook + lookup round trip
-cd clop_monitor && python -m unittest   # 593 tests: the monitor's own suite
+python -m unittest discover -s tests    # 58 tests: lorebook, lookups, dossier
+cd clop_monitor && python -m unittest   # 615 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
 `tests/test_lookup_roundtrip.py` drives the lookup path with a hand-written stub provider
 and asserts `anthropic` was never imported — that is the claim it exists to protect.
+`tests/test_lookup_reachability.py` is structural: every `LOOKUPS` row must resolve to a real
+callable and every tool in `make_live_tools` must have a row. It exists because the same bug
+happened twice — tools written, registered in one place, never connected to what calls them.
+Its `RenderingTests` class covers the other half: reachable and correct are two claims.
 For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM → TTS stages individually.
 
 ## Persistent State Files
@@ -345,6 +397,7 @@ For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM 
 |------|-----------|-----------------|--------|
 | `directives.json` | AgentLoop | Yes | `{"directives": [...], "enforcement": null, "standing_rules": [...]}` |
 | `routines.json` | RoutineManager | Yes | `[{"id": ..., "schedule": ..., "goal": ..., ...}]` |
+| `clop_dossier.json` | DossierStore | Yes | `{"nations": {...}, "alliances": {...}, "seen": {...}}` |
 | `wake_state.json` | RoutineManager | Yes | `{"wake_time": ISO, "last_active": ISO}` |
 | `memory/sessions.txt` | Pipeline (summarize_session) | Yes | Plain text, last 3 sessions |
 | `memory/user_profile.txt` | user_profile.py | Yes | Structured text |

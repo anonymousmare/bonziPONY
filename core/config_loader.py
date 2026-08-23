@@ -193,6 +193,14 @@ class ClopConfig:
     strategy_thoughts: str = "rare"
     #: How often she reads the configured 4chan thread, in hours. 0 disables it.
     thread_check_hours: float = 1.0
+    #: Let her read the alliance chat. Opening myalliance.php runs
+    #: UPDATE users SET alliance_messages_last_checked = NOW(), so reading it marks the
+    #: whole chat read for the account -- in your own browser too. On means she can tell
+    #: you what the alliance said; off means she can only ever tell you how many there are.
+    read_alliance_messages: bool = True
+    #: How long a reading of another nation stays trustworthy. Garrisons only change on
+    #: war ticks, twelve hours apart, so half that is about its useful life.
+    dossier_max_age_hours: float = 6.0
 
 
 @dataclass
@@ -430,6 +438,8 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             speak_notifications=str(clop_raw.get("speak_notifications", "never")),
             strategy_thoughts=str(clop_raw.get("strategy_thoughts", "rare")),
             thread_check_hours=float(clop_raw.get("thread_check_hours", 1.0)),
+            read_alliance_messages=bool(clop_raw.get("read_alliance_messages", True)),
+            dossier_max_age_hours=float(clop_raw.get("dossier_max_age_hours", 6.0)),
         ),
         auto_update=auto_update,
         presentation_mode=bool(presentation_mode),

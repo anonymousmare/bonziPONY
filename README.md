@@ -1,8 +1,14 @@
 # bonziPONY
 
-An AI-powered desktop companion that puts a fully autonomous, voice-interactive pony on your Windows desktop. It listens for wake words, speaks back through TTS, monitors your screen, nags you about your responsibilities, and controls your desktop — all while trotting around as an animated sprite.
+Twilight Sparkle, pinned to the bottom-right of your Windows desktop, as your 4CLOP advisor.
+She listens for her name, speaks back through TTS, watches the game for you, relays what
+happens, and tells you what you missed while you were away.
 
-This is not a chatbot with a pony skin. It's a persistent agent that runs autonomously between conversations, tracks your tasks, enforces accountability, reacts to what's on your screen, and has opinions about your life choices.
+This is not a chatbot with a pony skin. It's a persistent agent that runs autonomously between
+conversations, tracks your tasks, reacts to what's on your screen, reads the game's pages when
+asked, and has opinions about your build order.
+
+The 4CLOP monitor runs inside this process — one clone, one thing to start.
 
 ## What it does
 
@@ -29,9 +35,27 @@ This is not a chatbot with a pony skin. It's a persistent agent that runs autono
 
 **Vision.** Optional screen capture and webcam support. The pony can describe what's on your screen and react to it. Vision is sent to the LLM as part of the conversation context.
 
-**Desktop pet.** 311 characters from the Desktop Ponies sprite library. Animated GIF behaviors parsed from pony.ini files — walking, flying, sleeping, hovering, and dozens more per character. Effects rendering, configurable scale, speech bubbles, right-click context menu for everything.
+**Desktop pet.** Twilight Sparkle, pinned to a screen corner rather than roaming. Animated GIF
+behaviors from her Desktop Ponies sprite set, configurable scale, speech bubbles, and a
+right-click context menu for everything. The multi-character hotswap this was built on has been
+removed — there is one pony now, and she has a job.
 
-**Mane 6 hotswap.** Switch between Rainbow Dash, Twilight Sparkle, Pinkie Pie, Rarity, Applejack, and Fluttershy at runtime from the right-click menu. Each character has their own personality preset, wake phrases, and sprite set. Swap is instant — new sprites load, LLM history resets, wake word detection switches to the new character's phrases.
+**4CLOP advisor.** The game monitor polls every 60 seconds on a background thread. Alerts land
+in a notification box above her instead of as Windows toasts: dark grey, slightly transparent,
+white text, a 2px coloured trim in the good's own colour where one applies, click to open the
+page, and a mark-as-read button. Anything you did not read is kept, so coming back after a
+while gets you a spoken summary of what you missed rather than a silent gap.
+
+**She reads the game.** Building costs, pollution projections, your stockpiles and status, the
+market, other nations' buildings and garrisons, alliance rosters, your inbox, the news feed —
+all through `[LOOKUP:]`, all from the game's own data rather than from memory. Battles are
+simulated in-process by a port of the game's own combat loop. See
+[Looking things up](#looking-things-up).
+
+**The thread.** Every hour she checks the 4CLOP thread on /mlp/ and decides whether it is worth
+saying anything. A cheap arithmetic gate runs before any model call, so a quiet hour costs
+nothing. She reads it and never posts to it. Posts are sanitized before they reach a prompt,
+the same way window titles are.
 
 **User profile and memory.** The pony builds a persistent profile of the user over time — name, age, location, job, interests, personality traits, whatever comes up naturally in conversation. It also tracks ongoing events (upcoming interviews, exams, deadlines, goals) and follows up on them later. After every conversation, new facts are extracted and saved. Stale events are pruned on startup. The profile is injected into every prompt so the character genuinely remembers who you are across sessions.
 
@@ -51,6 +75,13 @@ main.py                          Entry point, wires everything together
 │   ├── memory.py                Session summaries persisted across restarts
 │   ├── user_profile.py          Persistent user profile + event tracking
 │   ├── config_loader.py         YAML → typed dataclasses + env var overrides
+│   ├── clop_bridge.py           Runs the monitor's poll loop in-process
+│   ├── clop_unread.py           What was missed while you were away
+│   ├── clop_tools.py            The lookups she can ask for instead of guessing
+│   ├── clop_lore.py             Game facts auto-injected when she mentions something
+│   ├── clop_thread.py           The hourly /mlp/ read and the gate in front of it
+│   ├── clop_dossier.py          What she has learned about other nations
+│   ├── warcalc.py               Battle simulation, ported from the game's combat loop
 │   └── audio_utils.py           Audio utilities
 ├── llm/
 │   ├── base.py                  Abstract LLMProvider interface
@@ -66,7 +97,8 @@ main.py                          Entry point, wires everything together
 │   ├── behavior_manager.py      pony.ini parsing, behavior selection
 │   ├── effect_renderer.py       Visual effects overlay
 │   ├── speech_bubble.py         Text bubble widget
-│   └── context_menu.py          Right-click menu (character switch, settings, directives)
+│   ├── notification_box.py      Relayed CLOP alerts, clickable, with a coloured trim
+│   └── context_menu.py          Right-click menu (settings, directives)
 ├── wake_word/
 │   └── detector.py              Whisper-based keyword spotting with per-character phrases
 ├── stt/
@@ -80,8 +112,13 @@ main.py                          Entry point, wires everything together
 ├── robot/
 │   ├── desktop_controller.py    Window ops, volume, keyboard/mouse automation
 │   └── actions.py               RobotAction enum
+├── clop_monitor/                Vendored 4CLOP monitor (on sys.path, not a package)
+│   ├── clop_monitor.py          Poll loop, alert building, notification sinks
+│   ├── clop_pages.py            Parsers: viewnation, viewalliance, messages, news
+│   └── fixtures/                Page HTML rendered by the game's own PHP templates
+├── data/gamedata.json           Building/good/unit stats, generated from the game's SQL
 ├── presets/                     Character system prompts (one .txt per character)
-├── Ponies/                      311 sprite directories (pony.ini + GIF animations)
+├── Ponies/                      Sprite directories (pony.ini + GIF animations)
 └── config.yaml                  All configuration (gitignored — use config.yaml.example)
 ```
 
@@ -420,6 +457,45 @@ Spoken text goes here. [DIRECTIVE:do homework:6] [CONVO:CONTINUE]
 | `[DESKTOP:OPEN:app]` | Open application | `[DESKTOP:OPEN:notepad]` |
 | `[DESKTOP:BROWSE:url]` | Open URL | `[DESKTOP:BROWSE:youtube.com]` |
 | `[DESKTOP:SCROLL:n]` | Scroll | `[DESKTOP:SCROLL:-3]` (down) |
+| `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:nation:47]` |
+| `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
+
+### Looking things up
+
+`[LOOKUP:]` is a tag rather than an API function call on purpose. Native tool calling was
+tried and removed: DeepSeek via nano-gpt — which this is built to run on — returns tool calls
+as plain text in `content` instead of `tool_calls` often enough to matter, and the provider
+would swallow that into an empty string. A tag cannot fall through to text mode, because text
+is the mode. It works identically on every backend.
+
+She sees the list of lookups in her prompt, generated from the `LOOKUPS` table, so it never
+offers one that is switched off or whose game session is down.
+
+| Lookup | Answers |
+|--------|---------|
+| `building`, `buildings`, `recipe` | Costs, per-tick production and consumption, pollution |
+| `good`, `pollution`, `rules`, `nationtypes` | Game data straight from the SQL export |
+| `stockpiles`, `status`, `market` | Your own nation, live |
+| `nation:47`, `alliance:12` | Someone else's buildings, garrison, GDP and net production |
+| `messages`, `alliance_messages`, `news` | Your inbox, the alliance chat, the news feed |
+| `thread` | The 4CLOP thread on /mlp/ |
+| `dossier` | Which nations she has read, and how fresh each reading is |
+| `cost` | What a force costs to hire, equip and keep fed |
+
+Common names are also injected automatically without a round trip, so mentioning a Coffee Farm
+puts its real numbers in front of her before she answers.
+
+**Reading other nations.** `viewnation.php` renders the whole garrison, so
+`[LOOKUP:nation:47]` gives her their forces in the exact shape the battle simulator takes —
+"can I take them" is a real answer rather than a guess. Readings are stored in
+`clop_dossier.json` with a timestamp and reused until they go stale
+(`clop.dossier_max_age_hours`), and a nation that shows up bidding in the market gets noted
+for a look without spending a page fetch on it.
+
+**One caveat, by design.** Reading the alliance chat marks it read *for your account* — you
+will see it as read in your own browser too. That is the game's behaviour on the GET, not
+something this adds. It is the one lookup that can be switched off:
+`clop.read_alliance_messages: false`.
 
 ## Escalation behavior
 
@@ -489,7 +565,7 @@ It still works standalone if you want toasts without the pony:
 cd clop_monitor
 python clop_monitor.py            # long-running, Windows toasts
 python clop_monitor.py --once     # poll once and exit
-python -m unittest                # its own 593 tests
+python -m unittest                # its own 615 tests
 ```
 
 Credentials and watched goods live in `clop_monitor/.env` and `clop_monitor/settings.json`

@@ -121,6 +121,12 @@ clop:
                                # 60s poll, reading every alert aloud means talking all day.
                                # She still speaks the welcome-back catch-up either way.
   strategy_thoughts: "rare"    # off | rare | on — how often she volunteers a read on your position
+  read_alliance_messages: true  # let her read the alliance chat.
+                               # WARNING: opening myalliance.php marks the whole alliance
+                               # chat read for your account — in your own browser too.
+                               # On, she can tell you what was said. Off, only how many.
+  dossier_max_age_hours: 6.0   # how long a reading of another nation stays trusted before
+                               # she spends a page fetch re-reading it
   thread_check_hours: 1.0      # how often she reads the 4chan thread (0 to disable).
                                # The thread URL itself lives in the monitor's settings.json
                                # under fourchan.thread_url

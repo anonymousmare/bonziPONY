@@ -325,15 +325,17 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
         import nation as nation_module
 
         status = nation_module.NationStatus.from_overview(html)
+        # Only the three Reading fields carry a per-tick delta and know how to render it.
+        # Government and economy are plain strings; GDP and funds are plain ints.
         return "\n".join([
             "Nation status:",
-            f"  Government: {status.government.display()}",
-            f"  Economy: {status.economy.display()}",
+            f"  Government: {status.government}",
+            f"  Economy: {status.economy}",
             f"  Satisfaction: {status.satisfaction.display()}",
             f"  Solar Empire relation: {status.se.display()}",
             f"  New Lunar Republic relation: {status.nlr.display()}",
-            f"  GDP last turn: {status.gdp.display()}",
-            f"  Funds: {status.funds.display()}",
+            f"  GDP last turn: {status.gdp:,} bits per tick",
+            f"  Funds: {status.funds:,} bits",
             f"  Server time: {status.server_time}",
         ])
 
@@ -359,6 +361,141 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
         )
         return "\n".join(lines)
 
+    def _forces_line(forces, hostile: bool) -> str:
+        rows = [f for f in forces if bool(f.get("hostile")) == hostile]
+        if not rows:
+            return "  none"
+        return "\n".join(
+            f"  {f['size']} {f['type']} ({f['weapon']}/{f['armor']}, training {f['training']})"
+            for f in rows
+        )
+
+    def _render_nation(entry: Dict[str, Any], when: str = "") -> str:
+        lines = [
+            f"{entry['name']} (nation #{entry['nation_id']}){when}",
+            f"  {entry.get('region', '?')}, {entry.get('government', '?')} / "
+            f"{entry.get('economy', '?')}, led by {entry.get('leader', '?')}",
+            f"  alliance: {entry.get('alliance_name') or 'none'}",
+            f"  GDP {entry.get('gdp', 0):,} every 2 hours, age {entry.get('age', 0)}",
+        ]
+        buildings = entry.get("buildings") or {}
+        if buildings:
+            top = sorted(buildings.items(), key=lambda kv: -kv[1])
+            lines.append("  buildings: " + ", ".join(f"{n} x{c}" for n, c in top))
+        economy = entry.get("economy_rows") or {}
+        if economy:
+            short = [f"{g} {net:+d}" for g, (_gen, _used, net) in
+                     sorted(economy.items(), key=lambda kv: kv[1][2])]
+            lines.append("  net per tick: " + ", ".join(short))
+            lines.append("  (the game's own figures, government upkeep included)")
+        forces = entry.get("forces") or []
+        lines.append("  defending:")
+        lines.append(_forces_line(forces, hostile=False))
+        attacking = [f for f in forces if f.get("hostile")]
+        if attacking:
+            lines.append("  being attacked by:")
+            lines.append(_forces_line(forces, hostile=True))
+        lines.append(
+            "  To simulate against them, put their defenders in a [WARCALC:...] as "
+            "'count Type/Weapon/Armour/training'."
+        )
+        return "\n".join(lines)
+
+    def get_nation(target: str) -> str:
+        """One nation's page, by id or by a name already on file."""
+        from core import clop_dossier
+
+        dossier = clop_dossier.store()
+        wanted = str(target).strip()
+
+        nation_id = None
+        if wanted.lstrip("#").isdigit():
+            nation_id = int(wanted.lstrip("#"))
+        elif dossier is not None:
+            known = dossier.find_by_name(wanted)
+            if known is None:
+                raise ToolError(
+                    f"no nation called {wanted!r} on file. Give a nation id, or use "
+                    f"[LOOKUP:dossier] to see who is."
+                )
+            nation_id = int(known["nation_id"])
+        if nation_id is None:
+            raise ToolError(f"give a nation id, not {wanted!r}")
+
+        # A recent reading is worth more than a page fetch: garrisons only change on war
+        # ticks, twelve hours apart.
+        if dossier is not None and not dossier.is_stale(nation_id):
+            return _render_nation(dossier.nation(nation_id), when=" (from earlier today)")
+
+        nation = bridge.nation(nation_id)
+        if dossier is not None:
+            dossier.record_nation(nation)
+            return _render_nation(dossier.nation(nation_id))
+        return _render_nation({
+            "nation_id": nation_id, "name": nation.name, "region": nation.region,
+            "government": nation.government, "economy": nation.economy,
+            "leader": nation.leader, "alliance_name": nation.alliance_name,
+            "gdp": nation.gdp, "age": nation.age, "buildings": dict(nation.buildings),
+            "economy_rows": {k: list(v) for k, v in nation.economy_rows.items()},
+            "forces": [{"name": f.name, "type": f.type, "size": f.size,
+                        "training": f.training, "weapon": f.weapon,
+                        "armor": f.armor, "hostile": f.hostile} for f in nation.forces],
+        })
+
+    def get_alliance(alliance_id: str) -> str:
+        if not str(alliance_id).lstrip("#").isdigit():
+            raise ToolError(f"give an alliance id, not {alliance_id!r}")
+        from core import clop_dossier
+
+        alliance = bridge.alliance(int(str(alliance_id).lstrip("#")))
+        clop_dossier.store().record_alliance(alliance)
+        lines = [f"{alliance.name} (alliance #{alliance.alliance_id})"]
+        lines.append(f"  members: {', '.join(alliance.members) or 'none'}")
+        if alliance.in_stasis:
+            lines.append(f"  in stasis (cannot act): {', '.join(alliance.in_stasis)}")
+        if alliance.nations:
+            lines.append("  nations: " + ", ".join(
+                f"{n} (#{i}, {r})" for n, i, r in alliance.nations))
+        if alliance.economy_rows:
+            short = [f"{g} {net:+d}" for g, (_gen, _used, net) in
+                     sorted(alliance.economy_rows.items(), key=lambda kv: kv[1][2])]
+            lines.append("  combined net per tick: " + ", ".join(short))
+        return "\n".join(lines)
+
+    def get_messages() -> str:
+        rows = bridge.messages()
+        if not rows:
+            return "Your inbox is empty."
+        lines = [f"Inbox, {len(rows)} message(s), newest first:"]
+        for message in rows[:15]:
+            lines.append(f"  [{message.posted}] {message.sender}: {message.body}")
+        if len(rows) > 15:
+            lines.append(f"  ...and {len(rows) - 15} older")
+        return "\n".join(lines)
+
+    def get_alliance_messages() -> str:
+        rows = bridge.alliance_messages()
+        if not rows:
+            return "No alliance messages."
+        lines = [f"Alliance chat, {len(rows)} message(s), newest first:"]
+        for message in rows[:15]:
+            lines.append(f"  [{message.posted}] {message.sender}: {message.body}")
+        if len(rows) > 15:
+            lines.append(f"  ...and {len(rows) - 15} older")
+        lines.append("  (reading these marked them read for the account)")
+        return "\n".join(lines)
+
+    def get_news() -> str:
+        rows = bridge.news()
+        if not rows:
+            return "No news."
+        lines = [f"News, {len(rows)} item(s), newest first:"]
+        for item in rows[:12]:
+            lines.append(f"  [{item.posted}] {item.message}")
+        if len(rows) > 12:
+            lines.append(f"  ...and {len(rows) - 12} older")
+        return "\n".join(lines)
+
     def read_thread(since_post: int = 0) -> str:
         import fourchan
 
@@ -373,12 +510,21 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
             thread_id=getattr(thread, "thread_id", None),
         )
 
-    return {
+    tools = {
         "get_stockpiles": get_stockpiles,
         "get_nation_status": get_nation_status,
         "get_market": get_market,
         "read_thread": read_thread,
+        "get_nation": get_nation,
+        "get_alliance": get_alliance,
+        "get_messages": get_messages,
+        "get_news": get_news,
     }
+    # Alliance chat marks itself read for the account, so it is only offered when the
+    # user has said that trade is worth making.
+    if getattr(getattr(bridge, "config", None), "read_alliance_messages", False):
+        tools["get_alliance_messages"] = get_alliance_messages
+    return tools
 
 
 # ── Warcalc tools ─────────────────────────────────────────────────────────────
@@ -427,6 +573,18 @@ def calc_force_cost(forces: List[Dict], przewalskia: bool = False) -> str:
 
 
 
+def get_dossier() -> str:
+    """What she has already read about other nations, and how fresh each reading is.
+
+    Static rather than live on purpose: the dossier is a file, so this still answers when
+    the game is unreachable -- which is exactly when knowing what she already learned is
+    most useful.
+    """
+    from core import clop_dossier
+
+    return clop_dossier.store().summary()
+
+
 # ── The lookup table ──────────────────────────────────────────────────────────
 #
 # One row per thing she can look up. This drives three things at once -- the
@@ -459,6 +617,11 @@ class Lookup:
     #: True when it needs the authenticated session, so it is only offered when
     #: the bridge is connected.
     live: bool = False
+    #: For a live lookup, the key it has in ``make_live_tools``. On the row rather than in
+    #: a lookup table somewhere else: this used to be a hardcoded dict in ToolRegistry, and
+    #: a row missing from it raised KeyError at call time instead of failing at review time.
+    #: test_lookup_reachability.py holds every live row to resolving.
+    live_name: str = ""
 
 
 LOOKUPS: Tuple[Lookup, ...] = (
@@ -472,18 +635,36 @@ LOOKUPS: Tuple[Lookup, ...] = (
            "the satisfaction cost of owning N of something"),
     Lookup("rules", ("rule",), get_rules, ("topic?",),
            "how ticks, production, pollution, GDP, combat or the market actually work"),
-    Lookup("nations", ("nation", "governments"), get_nation_types, (),
-           "what each nation produces, and the government multipliers and caps"),
+    Lookup("nationtypes", ("governments", "regions"), get_nation_types, (),
+           "what each nation TYPE produces, and the government multipliers and caps"),
     Lookup("cost", ("forcecost", "army"), calc_force_cost, ("forces",),
            "what raising and equipping an army costs"),
     Lookup("stockpiles", ("stock", "holding"), None, (),
-           "what the user is holding right now", live=True),
+           "what the user is holding right now", live=True, live_name="get_stockpiles"),
     Lookup("status", ("nation_status", "empire"), None, (),
-           "the user's government, economy, satisfaction, funds and standing", live=True),
+           "the user's government, economy, satisfaction, funds and standing",
+           live=True, live_name="get_nation_status"),
     Lookup("market", ("bids", "orders"), None, ("good?",),
-           "who is bidding on what, at what price", live=True),
+           "who is bidding on what, at what price", live=True, live_name="get_market"),
     Lookup("thread", ("4chan", "posts"), None, ("since_post?",),
-           "the 4CLOP thread on /mlp/", live=True),
+           "the 4CLOP thread on /mlp/", live=True, live_name="read_thread"),
+    Lookup("nation", ("player", "enemy"), None, ("id_or_name",),
+           "another nation: buildings, garrison, GDP and net production per tick",
+           live=True, live_name="get_nation"),
+    Lookup("alliance", ("bloc",), None, ("id",),
+           "an alliance: members, their nations, and the combined economy",
+           live=True, live_name="get_alliance"),
+    Lookup("messages", ("inbox", "dms"), None, (),
+           "the user's inbox", live=True, live_name="get_messages"),
+    Lookup("alliance_messages", ("alliance_chat",), None, (),
+           "the alliance chat (reading it marks it read for the account)",
+           live=True, live_name="get_alliance_messages"),
+    Lookup("news", ("headlines",), None, (),
+           "the game's news feed", live=True, live_name="get_news"),
+    # Not live: the dossier is a file, so it still answers when the game is unreachable --
+    # which is exactly when knowing what she already learned is most useful.
+    Lookup("dossier", ("intel", "who"), get_dossier, (),
+           "which nations she has read, and how fresh each reading is"),
 )
 
 BY_NAME: Dict[str, Lookup] = {}
@@ -519,7 +700,7 @@ class ToolRegistry:
             self._live = make_live_tools(bridge)
 
         self.available: Tuple[Lookup, ...] = tuple(
-            l for l in LOOKUPS if not l.live or self._live
+            l for l in LOOKUPS if not l.live or l.live_name in self._live
         )
 
     @property
@@ -529,13 +710,8 @@ class ToolRegistry:
     def _callable(self, lookup: Lookup) -> Optional[Callable[..., str]]:
         if not lookup.live:
             return lookup.run
-        # The live tools are built per-bridge, so they are looked up by name.
-        return self._live.get({
-            "stockpiles": "get_stockpiles",
-            "status": "get_nation_status",
-            "market": "get_market",
-            "thread": "read_thread",
-        }[lookup.name])
+        # Live tools are built per-bridge, so the row names the one it wants.
+        return self._live.get(lookup.live_name)
 
     def dispatch(self, query: str) -> str:
         """Run one `[LOOKUP:...]` body. Errors come back as text, never raised.

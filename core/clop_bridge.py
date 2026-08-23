@@ -135,6 +135,14 @@ class ClopBridge:
         self._unread = unread
         self._on_failure = on_failure
 
+        from core import clop_dossier
+
+        #: What she has learned about other nations. The same object the lookup layer
+        #: uses -- clop_dossier.store memoises by path so there is only ever one writer.
+        self.dossier = clop_dossier.store(
+            max_age_hours=float(getattr(clop_config, "dossier_max_age_hours", 6.0))
+        )
+
         self.monitor = None
         self.client = None
         self.settings = None
@@ -290,6 +298,31 @@ class ClopBridge:
             )
         self._previous = current
         self.last_error = None
+        self._notice_market_nations(current)
+
+    def _notice_market_nations(self, snapshot) -> None:
+        """Mark every nation bidding on the market as worth reading about.
+
+        Taken from the snapshot's own MarketOrder objects rather than from the rendered
+        alert text: the order already carries nation_id as a number, so there is nothing
+        to parse back out and nothing to get wrong.
+
+        This only records. Nothing is fetched here -- a page is spent when she is actually
+        asked, or when the reading has gone stale. The effect is that the dossier fills
+        with the people who are actually trading against the user.
+        """
+        for order in getattr(snapshot, "market_orders", ()) or ():
+            nation_id = getattr(order, "nation_id", None)
+            if not nation_id or nation_id < 0:
+                continue  # negative ids are the NPC empires, which have no page
+            try:
+                self.dossier.notice(
+                    nation_id,
+                    name=getattr(order, "nation_name", ""),
+                    why=f"bidding on {getattr(order, 'good', 'something')}",
+                )
+            except Exception as exc:
+                logger.debug("Could not note nation %s: %s", nation_id, exc)
 
     # ── Read-through helpers for the tool layer ───────────────────────────
 
@@ -322,6 +355,64 @@ class ClopBridge:
                 else None
             )
             return list(self.client._market_orders(roster))
+
+    # ── Pages the alert loop never needed ─────────────────────────────────
+
+    def nation(self, nation_id: int):
+        """Read another nation's public page: buildings, garrison, GDP, economy."""
+        self._require()
+        import clop_pages
+
+        with self.lock:
+            html = self.client._open(f"viewnation.php?nation_id={int(nation_id)}")
+        return clop_pages.parse_nation(html, nation_id=int(nation_id))
+
+    def alliance(self, alliance_id: int):
+        """Read an alliance page: members, their nations, and the combined economy."""
+        self._require()
+        import clop_pages
+
+        with self.lock:
+            html = self.client._open(f"viewalliance.php?alliance_id={int(alliance_id)}")
+        return clop_pages.parse_alliance(html, alliance_id=int(alliance_id))
+
+    def messages(self, box: str = "inbox"):
+        """The user's inbox.
+
+        Safe: messages.php lists without marking anything read -- ``is_read`` only changes
+        on an explicit POST (backend_messages.php:108-112).
+        """
+        self._require()
+        import clop_pages
+
+        with self.lock:
+            html = self.client._open("messages.php")
+        return clop_pages.parse_messages(html, box=box)
+
+    def alliance_messages(self):
+        """The alliance chat.
+
+        **This marks the whole alliance chat read for the account**, in the user's own
+        browser too: myalliance.php runs UPDATE users SET alliance_messages_last_checked
+        = NOW() (backend_myalliance.php:231). It is behind a config flag for that reason,
+        and the caller is expected to have checked it.
+        """
+        self._require()
+        import clop_pages
+
+        with self.lock:
+            html = self.client._open("myalliance.php")
+        logger.info("Read myalliance.php — alliance messages are now marked read")
+        return clop_pages.parse_alliance_messages(html)
+
+    def news(self):
+        """Every row of the news page, newest first."""
+        self._require()
+        import clop_pages
+
+        with self.lock:
+            html = self.client._open("news.php")
+        return clop_pages.parse_news(html)
 
     def thread_posts(self) -> List[Any]:
         """Every post in the configured 4chan thread."""
