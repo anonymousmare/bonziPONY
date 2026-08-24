@@ -129,6 +129,9 @@ clop:
   #                            # environment; defaults to <monitor_path>/.env
   # state_file: null           # defaults to <monitor_path>/.state/clop-monitor.json
   poll_interval_s: 60          # minimum 15 — it polls someone else's server
+  # Which alerts reach the box is NOT set here — right-click her -> 4CLOP -> Notifications.
+  # Kinds are toggles there; individual goods are muted from the "Mute Copper" button on the
+  # notification itself. Both are stored in notify_filters.json next to main.py.
   speak_notifications: "never" # never | high | always.  The box is silent by default: at a
                                # 60s poll, reading every alert aloud means talking all day.
                                # She still speaks the welcome-back catch-up either way.

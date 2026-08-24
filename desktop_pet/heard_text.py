@@ -1,14 +1,25 @@
-"""Small overlay below the pony showing what the STT heard."""
+"""Small overlay below the pony showing what the STT heard.
+
+Same panel as the notification box and the speech bubble, from ``panel_style``, with a pointer
+pointing up at her.
+"""
 
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt, QTimer, QRectF
-from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
+from PyQt5.QtGui import QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PyQt5.QtWidgets import QApplication, QWidget
+
+from desktop_pet.panel_style import (
+    BORDER_WIDTH,
+    PANEL_BG,
+    PANEL_BORDER,
+    RADIUS as _RADIUS,
+    TEXT_BODY,
+)
 
 _MAX_WIDTH = 350
 _PADDING = 8
-_RADIUS = 8
 _POINTER_SIZE = 8
 
 
@@ -126,8 +137,8 @@ class HeardText(QWidget):
         # Bubble background
         path = QPainterPath()
         path.addRoundedRect(QRectF(0, bubble_y, bubble_w, bubble_h), _RADIUS, _RADIUS)
-        painter.setPen(QPen(QColor(100, 100, 100, 180), 1))
-        painter.setBrush(QColor(40, 40, 40, 200))
+        painter.setPen(QPen(PANEL_BORDER, BORDER_WIDTH))
+        painter.setBrush(PANEL_BG)
         painter.drawPath(path)
 
         # Pointer triangle pointing up toward pony
@@ -137,17 +148,22 @@ class HeardText(QWidget):
         ptr_path.lineTo(cx, 1)
         ptr_path.lineTo(cx + 5, bubble_y)
         ptr_path.closeSubpath()
-        painter.setBrush(QColor(40, 40, 40, 200))
-        painter.setPen(QPen(QColor(100, 100, 100, 180), 1))
+        painter.setBrush(PANEL_BG)
+        painter.setPen(QPen(PANEL_BORDER, BORDER_WIDTH))
         painter.drawPath(ptr_path)
 
-        # Fill seam
+        # Fill seam. Source rather than the default: the panel colour is translucent, so
+        # painting it a second time over the border would show as a lighter band instead of
+        # erasing the line.
+        painter.save()
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(40, 40, 40, 200))
+        painter.setBrush(PANEL_BG)
         painter.drawRect(int(cx) - 4, int(bubble_y), 8, 3)
+        painter.restore()
 
         # Text
-        painter.setPen(QColor(220, 220, 220))
+        painter.setPen(TEXT_BODY)
         painter.setFont(self._font)
         painter.drawText(
             QRectF(_PADDING, bubble_y + _PADDING,
