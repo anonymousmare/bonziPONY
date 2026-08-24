@@ -902,6 +902,11 @@ class ContextMenuBuilder:
                          lambda c: self._set("agent", "enabled", c))
         self._add_toggle(feat_menu, "Self-Initiate", cfg.agent.self_initiate,
                          lambda c: self._set("agent", "self_initiate", c))
+        # Named for what it actually does rather than for "check-ins", because the whole
+        # point of the switch is that people are turning off one specific kind of remark.
+        self._add_toggle(feat_menu, "Check On You (eaten? water? outside?)",
+                         getattr(cfg.agent, "check_ins", True),
+                         lambda c: self._set("agent", "check_ins", c))
         self._add_toggle(feat_menu, "Desktop Control", cfg.desktop_control.enabled,
                          lambda c: self._set("desktop_control", "enabled", c))
         self._add_toggle(feat_menu, "Wake Word", cfg.wake_word.enabled,
@@ -910,6 +915,10 @@ class ContextMenuBuilder:
                          lambda c: self._set("tts", "enabled", c))
         self._add_toggle(feat_menu, "Speech Bubbles", cfg.desktop_pet.speech_bubble,
                          lambda c: self._set("desktop_pet", "speech_bubble", c))
+        # Speech only. A typed message is never echoed back at all -- see Pipeline._run_turn.
+        self._add_toggle(feat_menu, "Show What The Mic Heard",
+                         getattr(cfg.desktop_pet, "heard_text", True),
+                         lambda c: self._set("desktop_pet", "heard_text", c))
         self._add_toggle(
             feat_menu,
             "Pixel Font (m5x7)",

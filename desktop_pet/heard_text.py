@@ -1,7 +1,9 @@
-"""Small overlay below the pony showing what the STT heard.
+"""Small overlay showing what the STT heard, under the pony where there is room for it.
 
 Same panel as the notification box and the speech bubble, from ``panel_style``, with a pointer
-pointing up at her.
+at whichever edge faces her. She is pinned to a screen corner by default, and in a bottom
+corner there is no room underneath, so the panel goes above her instead -- and the pointer has
+to follow. One that always pointed up left the panel sitting above her aiming at the ceiling.
 """
 
 from __future__ import annotations
@@ -39,6 +41,9 @@ class HeardText(QWidget):
 
         self._text = ""
         self._anchor_widget = None
+        #: Which edge the pointer sits on. False when the panel had to go above her, which
+        #: is the normal case for the default bottom-right pin.
+        self._pointer_up = True
 
         self._font = QFont("Segoe UI", 9)
         self._font.setItalic(True)
@@ -100,6 +105,7 @@ class HeardText(QWidget):
 
         bx = anchor_x - self.width() // 2
         by = anchor_y + 4  # small gap below sprite
+        pointer_up = True
 
         # Clamp to screen
         from PyQt5.QtCore import QPoint
@@ -113,8 +119,13 @@ class HeardText(QWidget):
             # If clamped position overlaps anchor, flip above the pony
             if by_clamped < anchor_y + 4:
                 by = max(geom.top(), w.y() - self.height() - 4)
+                pointer_up = False
             else:
                 by = by_clamped
+
+        if pointer_up != self._pointer_up:
+            self._pointer_up = pointer_up
+            self.update()   # the pointer is painted, so a flip has to repaint
 
         self.move(bx, by)
 
@@ -132,7 +143,9 @@ class HeardText(QWidget):
         )
         bubble_w = min(max(text_rect.width() + 2 * _PADDING, 60), _MAX_WIDTH)
         bubble_h = text_rect.height() + 2 * _PADDING
-        bubble_y = _POINTER_SIZE
+        # The pointer's strip of height is above the panel or below it, never both: the
+        # widget is only tall enough for one.
+        bubble_y = _POINTER_SIZE if self._pointer_up else 0
 
         # Bubble background
         path = QPainterPath()
@@ -141,12 +154,14 @@ class HeardText(QWidget):
         painter.setBrush(PANEL_BG)
         painter.drawPath(path)
 
-        # Pointer triangle pointing up toward pony
+        # Pointer triangle, on the edge that faces her
         ptr_path = QPainterPath()
         cx = bubble_w // 2
-        ptr_path.moveTo(cx - 5, bubble_y)
-        ptr_path.lineTo(cx, 1)
-        ptr_path.lineTo(cx + 5, bubble_y)
+        tip_y = 1 if self._pointer_up else bubble_y + bubble_h + _POINTER_SIZE - 1
+        base_y = bubble_y if self._pointer_up else bubble_y + bubble_h
+        ptr_path.moveTo(cx - 5, base_y)
+        ptr_path.lineTo(cx, tip_y)
+        ptr_path.lineTo(cx + 5, base_y)
         ptr_path.closeSubpath()
         painter.setBrush(PANEL_BG)
         painter.setPen(QPen(PANEL_BORDER, BORDER_WIDTH))
@@ -159,7 +174,8 @@ class HeardText(QWidget):
         painter.setCompositionMode(QPainter.CompositionMode_Source)
         painter.setPen(Qt.NoPen)
         painter.setBrush(PANEL_BG)
-        painter.drawRect(int(cx) - 4, int(bubble_y), 8, 3)
+        seam_y = bubble_y if self._pointer_up else bubble_y + bubble_h - 2
+        painter.drawRect(int(cx) - 4, int(seam_y), 8, 3)
         painter.restore()
 
         # Text

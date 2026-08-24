@@ -401,8 +401,24 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
         )
         return "\n".join(lines)
 
+    def _nation_id_for(name: str) -> int:
+        """A nation id for a name, from the roster of everyone in the game."""
+        roster = _roster()
+        hits = roster.find(name)
+        if len(hits) == 1:
+            return int(hits[0]["nation_id"])
+        if hits:
+            listed = ", ".join(f"{e['name']} (#{e['nation_id']})" for e in hits[:8])
+            raise ToolError(
+                f"{name!r} matches {len(hits)} nations: {listed}. Ask for one by id."
+            )
+        raise ToolError(
+            f"no nation called {name!r} in any region. [LOOKUP:nations:{name}] searches "
+            f"owners too, and [LOOKUP:nations] lists everyone."
+        )
+
     def get_nation(target: str) -> str:
-        """One nation's page, by id or by a name already on file."""
+        """One nation's page, by id or by name -- anyone's, not only a name already read."""
         from core import clop_dossier
 
         dossier = clop_dossier.store()
@@ -411,16 +427,13 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
         nation_id = None
         if wanted.lstrip("#").isdigit():
             nation_id = int(wanted.lstrip("#"))
-        elif dossier is not None:
-            known = dossier.find_by_name(wanted)
-            if known is None:
-                raise ToolError(
-                    f"no nation called {wanted!r} on file. Give a nation id, or use "
-                    f"[LOOKUP:dossier] to see who is."
-                )
-            nation_id = int(known["nation_id"])
-        if nation_id is None:
-            raise ToolError(f"give a nation id, not {wanted!r}")
+        else:
+            known = dossier.find_by_name(wanted) if dossier is not None else None
+            # The dossier first because it costs nothing, then the roster, which knows
+            # every nation in the game rather than only the ones she has already read.
+            # Before the roster existed this was where a name she had not met became
+            # "no nation called that on file" -- which is not what the user asked.
+            nation_id = int(known["nation_id"]) if known else _nation_id_for(wanted)
 
         # A recent reading is worth more than a page fetch: garrisons only change on war
         # ticks, twelve hours apart.
@@ -460,6 +473,154 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
             short = [f"{g} {net:+d}" for g, (_gen, _used, net) in
                      sorted(alliance.economy_rows.items(), key=lambda kv: kv[1][2])]
             lines.append("  combined net per tick: " + ", ".join(short))
+        return "\n".join(lines)
+
+    def _roster(force: bool = False):
+        """The roster of who exists, refreshed if it has gone stale.
+
+        A failed refresh is not a failed lookup. The rankings pages are public and cheap,
+        but they are still someone else's server: when they cannot be reached and there is
+        a stored roster, saying who existed this morning beats saying nothing.
+        """
+        from core import clop_roster
+
+        roster = clop_roster.store()
+        if force or roster.is_stale():
+            try:
+                bridge.refresh_roster(force=force)
+            except Exception as exc:
+                logger.warning("Could not refresh the roster: %s", exc)
+                if roster.empty:
+                    raise ToolError(
+                        f"could not read the rankings pages, and nothing is on file yet: "
+                        f"{exc}"
+                    )
+        return roster
+
+    def _roster_line(entry: Dict[str, Any], with_region: bool = True) -> str:
+        """One nation as a line. The region is dropped under a region heading."""
+        where = [entry.get("subregion")]
+        if with_region:
+            where.append(entry.get("region"))
+        rule = " / ".join(x for x in (entry.get("government"), entry.get("economy")) if x)
+        tail = " — ".join(x for x in (entry.get("user"), ", ".join(w for w in where if w),
+                                      rule) if x)
+        return f"  {entry['name']} (#{entry['nation_id']})" + (f" — {tail}" if tail else "")
+
+    def _roster_age(roster) -> str:
+        hours = roster.age_hours()
+        if hours == float("inf"):
+            return ""
+        return " (read just now)" if hours < 1 else f" (read {hours:.0f}h ago)"
+
+    def get_roster(term: str = "") -> str:
+        """Every nation in the game, or the ones matching a name, owner or region.
+
+        This is the phone book the dossier is not. The dossier holds what she has actually
+        read; this holds who is out there to read, which is what makes asking about a nation
+        by name work for someone she has never looked at.
+        """
+        from core import clop_roster
+
+        roster = _roster()
+        wanted = " ".join(str(term or "").split())
+
+        region_mode = clop_roster.mode_for_region(wanted) if wanted else None
+        if region_mode is not None:
+            region = clop_roster.region_for_mode(region_mode)
+            rows = roster.in_region(region)
+            if not rows:
+                return f"No nations on file for {region}."
+            lines = [f"{region}, {len(rows)} nation(s){_roster_age(roster)}:"]
+            lines += [_roster_line(entry, with_region=False) for entry in rows[:_MAX_LIST]]
+            if len(rows) > _MAX_LIST:
+                lines.append(f"  ...and {len(rows) - _MAX_LIST} more")
+            return "\n".join(lines)
+
+        if wanted:
+            hits = roster.find(wanted)
+            if not hits:
+                return (
+                    f"No nation or player called {wanted!r} in any region. The roster has "
+                    f"{len(roster.nations)} nation(s){_roster_age(roster)}; ask for a region "
+                    f"({', '.join(clop_roster.REGION_MODES)}) to see them."
+                )
+            head = (f"{len(hits)} match(es) for {wanted!r}:" if len(hits) > 1
+                    else f"One match for {wanted!r}:")
+            lines = [head] + [_roster_line(entry) for entry in hits[:_MAX_LIST]]
+            if len(hits) > _MAX_LIST:
+                lines.append(f"  ...and {len(hits) - _MAX_LIST} more")
+            lines.append("Use [LOOKUP:nation:<id>] for their buildings, garrison and economy.")
+            return "\n".join(lines)
+
+        rows = roster.nations
+        if not rows:
+            return "The roster is empty — the rankings pages could not be read."
+        lines = [f"{len(rows)} nation(s) in the game{_roster_age(roster)}:"]
+        for region in clop_roster.REGION_MODES:
+            here = roster.in_region(region)
+            if not here:
+                continue
+            lines.append(f"{region} ({len(here)}):")
+            lines += [_roster_line(entry, with_region=False) for entry in here[:_MAX_LIST]]
+            if len(here) > _MAX_LIST:
+                lines.append(f"  ...and {len(here) - _MAX_LIST} more")
+        lines.append("Use [LOOKUP:nation:<id or name>] to actually read one of them.")
+        return "\n".join(lines)
+
+    def get_rankings(mode: str = "gdp") -> str:
+        """One rankings.php board: the top twenty by GDP, age or statues.
+
+        The mode is checked before it is fetched. The game does not reject an unknown one --
+        it renders an empty roster instead -- so an unchecked typo would come back as
+        "nobody is on that board", which is a confident answer to a question nobody asked.
+        """
+        from core import clop_roster
+
+        wanted = " ".join(str(mode or "gdp").split()).casefold()
+        known = clop_roster.modes()
+        if wanted not in known:
+            # "burrozil" is a mode too, so a region asked for here is answered rather
+            # than refused -- it just comes back as a roster, which is what it is.
+            as_roster = clop_roster.mode_for_region(wanted)
+            if as_roster is None:
+                raise ToolError(
+                    f"no ranking called {wanted!r}. The boards are: "
+                    f"{', '.join(clop_roster.BOARD_MODES)}; the rosters are: "
+                    f"{', '.join(clop_roster.REGION_MODES)}."
+                )
+            wanted = as_roster
+
+        title = known.get(wanted, wanted)
+        rows = bridge.rankings(wanted)
+        if not rows:
+            return f"Nobody is on {title} yet."
+        label = rows[0].value_label or title
+        lines = [f"{title}, top {len(rows)}:" if rows[0].value is not None
+                 else f"{title}, {len(rows)} nation(s):"]
+        for row in rows[:_MAX_LIST]:
+            if row.value is None:
+                lines.append(_roster_line({
+                    "name": row.name, "nation_id": row.nation_id, "user": row.user,
+                    "subregion": row.subregion, "region": row.region,
+                    "government": row.government, "economy": row.economy,
+                }))
+                continue
+            rule = " / ".join(x for x in (row.government, row.economy) if x)
+            place = f" ({row.region})" if row.region else ""
+            # "Age: 8" rather than "8 Age" -- one label reads as a unit, the other does not.
+            figure = f"{label}: {row.value:,}"
+            if row.created:
+                figure += f", created {row.created}"
+            lines.append(
+                f"  {row.rank}. {row.name} (#{row.nation_id}){place} — {figure}"
+                + (f" — {rule}" if rule else "")
+            )
+        if wanted == "gdp":
+            lines.append(
+                "  The game says so itself: this counts only GDP from factories and "
+                "satisfaction, so it understates anyone living off the market."
+            )
         return "\n".join(lines)
 
     def get_messages() -> str:
@@ -515,8 +676,10 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
         "get_nation_status": get_nation_status,
         "get_market": get_market,
         "read_thread": read_thread,
+        "get_roster": get_roster,
         "get_nation": get_nation,
         "get_alliance": get_alliance,
+        "get_rankings": get_rankings,
         "get_messages": get_messages,
         "get_news": get_news,
     }
@@ -648,12 +811,19 @@ LOOKUPS: Tuple[Lookup, ...] = (
            "who is bidding on what, at what price", live=True, live_name="get_market"),
     Lookup("thread", ("4chan", "posts"), None, ("since_post?",),
            "the 4CLOP thread on /mlp/", live=True, live_name="read_thread"),
+    Lookup("nations", ("roster", "census"), None, ("name_or_region?",),
+           "who exists at all: every nation in the game with its id, owner and region. "
+           "Give a name, a player, or one of Saddle Arabia/Zebrica/Burrozil/Przewalskia",
+           live=True, live_name="get_roster"),
     Lookup("nation", ("player", "enemy"), None, ("id_or_name",),
            "another nation: buildings, garrison, GDP and net production per tick",
            live=True, live_name="get_nation"),
     Lookup("alliance", ("bloc",), None, ("id",),
            "an alliance: members, their nations, and the combined economy",
            live=True, live_name="get_alliance"),
+    Lookup("rankings", ("top", "leaderboard"), None, ("mode?",),
+           "the scoreboards: gdp, longevity, statues",
+           live=True, live_name="get_rankings"),
     Lookup("messages", ("inbox", "dms"), None, (),
            "the user's inbox", live=True, live_name="get_messages"),
     Lookup("alliance_messages", ("alliance_chat",), None, (),
@@ -817,8 +987,16 @@ class ToolRegistry:
         ]
         for lookup in self.available:
             args = "".join(f":{a.rstrip('?')}" for a in lookup.args)
-            optional = " (arguments after the first are optional)" if any(
-                a.endswith("?") for a in lookup.args) else ""
+            optional_args = [a for a in lookup.args if a.endswith("?")]
+            if not optional_args:
+                optional = ""
+            elif len(optional_args) == len(lookup.args):
+                # Every argument optional means the bare tag is the common use, and
+                # "arguments after the first are optional" reads as though it is not.
+                optional = (" (the argument is optional)" if len(lookup.args) == 1
+                            else " (all arguments are optional)")
+            else:
+                optional = " (arguments after the first are optional)"
             lines.append(f"  [LOOKUP:{lookup.name}{args}] — {lookup.help}{optional}")
         lines += [
             "  [LOOKUP:<any building or good>] — the short way; works without a kind",

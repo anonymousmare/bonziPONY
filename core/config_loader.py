@@ -121,6 +121,12 @@ class AgentConfig:
     spontaneous_speech_min_s: float = 120.0   # minimum seconds between random check-ins
     spontaneous_speech_max_s: float = 300.0   # maximum seconds between random check-ins
     sustained_focus_threshold_s: float = 900.0
+    #: Let her ask after the user themselves when nothing else is going on -- have you eaten,
+    #: had water, been outside, what's on your plate today. Off leaves her the in-character
+    #: half of the same idle chatter: what she is thinking about, an opinion, a complaint.
+    #: Timing, frequency and every other trigger are unchanged either way; this only decides
+    #: which half of the pool an idle remark is drawn from.
+    check_ins: bool = True
     distraction_keywords: List[str] = field(default_factory=lambda: [
         "youtube", "reddit", "tiktok", "twitch", "twitter", "instagram", "facebook",
     ])
@@ -160,6 +166,10 @@ class DesktopPetConfig:
     #: Screen region to hold, or None to let her wander as a desktop pet normally does.
     #: An advisor that relays notifications wants to be findable in the same place every
     #: time, and the notification box is drawn directly above her.
+    #: Show what the microphone heard, under her, while she thinks about it. This is the
+    #: transcription, not what you typed -- a typed message is never echoed back, because you
+    #: watched yourself write it.
+    heard_text: bool = True
     pin_to: Optional[str] = "bottom_right"
     pin_margin: int = 12               # pixels from the screen's work-area edge
 
@@ -201,6 +211,17 @@ class ClopConfig:
     #: How long a reading of another nation stays trustworthy. Garrisons only change on
     #: war ticks, twelve hours apart, so half that is about its useful life.
     dossier_max_age_hours: float = 6.0
+    #: How long the roster of who exists -- every nation, from the four regional rankings
+    #: pages -- stays good for. Nations are founded and die on a scale of days, and the
+    #: pages are public and unchanged by being read, so this is only about how soon somebody
+    #: brand new shows up in her phone book.
+    roster_max_age_hours: float = 12.0
+    #: Update the shared CLOP planning sheet each poll, the way the standalone monitor does.
+    #: The rule is the monitor's: on whenever CLOP_NATION names a tab in that sheet, off when
+    #: it does not. The writing is the monitor's own sync_sheet_step, so what lands in the tab
+    #: is identical either way. Set this false to keep the sync in your own clop_monitor.py
+    #: run instead -- two processes writing one tab is the only way this can go wrong.
+    sheet_sync: bool = True
     #: Find the current /mlp/ general from the board catalog instead of being told where
     #: it is. Threads archive in a day or two, so a URL in a settings file is stale more
     #: often than not -- and a stale one reads to the user as "she cannot check the thread".
@@ -390,6 +411,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             speech_bubble=pet_raw.get("speech_bubble", True),
             font_style=pet_raw.get("font_style", "default"),
             typewriter_sound=pet_raw.get("typewriter_sound", True),
+            heard_text=bool(pet_raw.get("heard_text", True)),
             pin_to=pet_raw.get("pin_to", "bottom_right"),
             pin_margin=pet_raw.get("pin_margin", 12),
         ),
@@ -410,6 +432,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             spontaneous_speech_min_s=agent_raw.get("spontaneous_speech_min_s", 120.0),
             spontaneous_speech_max_s=agent_raw.get("spontaneous_speech_max_s", 300.0),
             sustained_focus_threshold_s=agent_raw.get("sustained_focus_threshold_s", 900.0),
+            check_ins=bool(agent_raw.get("check_ins", True)),
             distraction_keywords=agent_raw.get("distraction_keywords", [
                 "youtube", "reddit", "tiktok", "twitch", "twitter", "instagram", "facebook",
             ]),
@@ -449,6 +472,8 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             thread_check_hours=float(clop_raw.get("thread_check_hours", 1.0)),
             read_alliance_messages=bool(clop_raw.get("read_alliance_messages", True)),
             dossier_max_age_hours=float(clop_raw.get("dossier_max_age_hours", 6.0)),
+            roster_max_age_hours=float(clop_raw.get("roster_max_age_hours", 12.0)),
+            sheet_sync=bool(clop_raw.get("sheet_sync", True)),
             thread_auto_find=bool(clop_raw.get("thread_auto_find", True)),
             thread_board=str(clop_raw.get("thread_board", "mlp") or "mlp"),
             thread_url=str(clop_raw.get("thread_url", "") or ""),

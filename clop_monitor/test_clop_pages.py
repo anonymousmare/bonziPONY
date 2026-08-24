@@ -15,6 +15,7 @@ from clop_pages import (
     parse_messages,
     parse_nation,
     parse_news,
+    parse_rankings,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -156,6 +157,74 @@ class NewsTests(unittest.TestCase):
 
     def test_an_empty_page_is_not_an_error(self):
         self.assertEqual(parse_news("<html><body></body></html>"), [])
+
+
+class RankingsTests(unittest.TestCase):
+    """rankings.php, in both of its shapes.
+
+    These three fixtures are live captures rather than PHP renders -- rankings.php is public,
+    so the real server answers without a login, and its own output beats a template fed
+    made-up rows. See fixtures/README.md.
+    """
+
+    def test_a_regional_roster_is_a_census(self):
+        rows = parse_rankings(fixture("rankings_burrozil.html"))
+        self.assertEqual(len(rows), 19)
+        self.assertEqual({r.region for r in rows}, {"Burrozil"})
+
+    def test_a_roster_row_carries_the_owner_and_both_ids(self):
+        rows = parse_rankings(fixture("rankings_burrozil.html"))
+        first = rows[0]
+        self.assertEqual(first.name, "Buenos Mares")
+        self.assertEqual(first.nation_id, 30)
+        self.assertEqual(first.user, "Gold Meddle")
+        self.assertEqual(first.user_id, 30)
+        self.assertEqual(first.subregion, "South")     # the page writes "South "
+        self.assertEqual(first.government, "Loose Despotism")
+        self.assertEqual(first.economy, "Poorly Defined")
+        self.assertIsNone(first.value)
+
+    def test_the_nation_name_is_split_from_its_region(self):
+        # The cell reads "Buenos Mares (<img/>Burrozil)"; the region must not end up in
+        # the name, because the name is what a player types when asking about them.
+        names = [r.name for r in parse_rankings(fixture("rankings_burrozil.html"))]
+        self.assertNotIn("(", "".join(names))
+        self.assertIn("Union of Prosperous Mare Republics", names)
+
+    def test_a_nation_and_its_owner_can_have_different_ids(self):
+        # nation_id 55 belongs to user_id 54. Reading one off the other would be wrong.
+        rows = {r.nation_id: r for r in parse_rankings(fixture("rankings_burrozil.html"))}
+        self.assertEqual(rows[55].user_id, 54)
+
+    def test_a_scoreboard_puts_its_number_in_value(self):
+        rows = parse_rankings(fixture("rankings_gdp.html"))
+        self.assertEqual(rows[0].rank, 1)
+        self.assertEqual(rows[0].name, "Starlight Reach")
+        self.assertEqual(rows[0].value, 1_454_240)     # read past the thousands separators
+        self.assertEqual(rows[0].value_label, "GDP Last Turn")
+        self.assertEqual([r.rank for r in rows], list(range(1, len(rows) + 1)))
+
+    def test_the_value_column_is_found_by_heading_not_position(self):
+        # longevity renders an extra Creation Date column between the value and the
+        # government, so a parser counting columns reads the date as the value.
+        rows = parse_rankings(fixture("rankings_longevity.html"))
+        self.assertEqual(rows[0].value_label, "Age")
+        self.assertEqual(rows[0].value, 8)
+        self.assertEqual(rows[0].created, "2026-08-16 00:54:52")
+        self.assertEqual(rows[0].government, "Loose Despotism")
+
+    def test_an_empty_board_is_not_an_error(self):
+        # Nobody has built a statue yet, and an unknown mode renders the same way: the
+        # headings with no rows. Neither is a parse failure.
+        headings = (
+            '<table><tr><th></th><th>Nation</th><th>Statues</th>'
+            "<th>Government</th><th>Economy</th></tr></table>"
+        )
+        self.assertEqual(parse_rankings(headings), [])
+
+    def test_a_page_that_is_not_rankings_says_so(self):
+        with self.assertRaises(PageParseError):
+            parse_rankings("<html><body><table><tr><td>hi</td></tr></table></body></html>")
 
 
 if __name__ == "__main__":

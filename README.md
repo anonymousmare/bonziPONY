@@ -494,6 +494,7 @@ Spoken text goes here. [DIRECTIVE:do homework:6] [CONVO:CONTINUE]
 | `[DESKTOP:BROWSE:url]` | Open URL | `[DESKTOP:BROWSE:youtube.com]` |
 | `[DESKTOP:SCROLL:n]` | Scroll | `[DESKTOP:SCROLL:-3]` (down) |
 | `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:nation:47]` |
+| `[LOOKUP:nations:x]` | Who exists at all | `[LOOKUP:nations]`, `[LOOKUP:nations:Silverspire]` |
 | `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
 
 ### Looking things up
@@ -512,7 +513,9 @@ offers one that is switched off or whose game session is down.
 | `building`, `buildings`, `recipe` | Costs, per-tick production and consumption, pollution |
 | `good`, `pollution`, `rules`, `nationtypes` | Game data straight from the SQL export |
 | `stockpiles`, `status`, `market` | Your own nation, live |
-| `nation:47`, `alliance:12` | Someone else's buildings, garrison, GDP and net production |
+| `nations`, `nations:burrozil`, `nations:Cottonmaw` | Who exists at all: every nation with its id, owner and region |
+| `nation:47`, `nation:Silverspire`, `alliance:12` | Someone else's buildings, garrison, GDP and net production |
+| `rankings:gdp`, `rankings:longevity` | The scoreboards |
 | `messages`, `alliance_messages`, `news` | Your inbox, the alliance chat, the news feed |
 | `thread` | The 4CLOP thread on /mlp/ |
 | `dossier` | Which nations she has read, and how fresh each reading is |
@@ -527,6 +530,30 @@ puts its real numbers in front of her before she answers.
 `clop_dossier.json` with a timestamp and reused until they go stale
 (`clop.dossier_max_age_hours`), and a nation that shows up bidding in the market gets noted
 for a look without spending a page fetch on it.
+
+**Who is out there.** The dossier only ever knew the nations she had actually read, so asking
+about anyone else came back as "no nation called that on file" — which was never the question.
+`rankings.php` has four regional modes, and between them they list every living nation in the
+game with its id, owner, subregion, government and economy. They are public: no login, nothing
+marked read. She reads all four every twelve hours (`clop.roster_max_age_hours`) into
+`clop_roster.json`, which is what makes `[LOOKUP:nations]` a census and lets
+`[LOOKUP:nation:Silverspire]` work for someone she has never looked at. Names are matched
+exactly first, then by prefix, then by substring, then against player handles, so an exact name
+is never buried under the nations that merely contain it.
+
+**The shared planning sheet.** The monitor can reconcile your building counts and snapshot your
+stockpiles into the alliance's shared Google Sheet each poll. That now runs inside the pet as
+well, and it is the monitor's own `sync_sheet_step` doing it, called with the same arguments
+from the same point in the poll — the sheet cannot tell which process wrote it. Set
+`CLOP_NATION` to the exact name of your tab in `clop_monitor/.env`, beside the login:
+
+```
+CLOP_NATION=LePone(Z)
+```
+
+Verify it with `python clop_monitor/sheets.py`, which resolves the name, checks the tab exists
+and reads one cell without writing anything. Run one writer, not two: if you would rather keep
+the sync in your own `clop_monitor.py` run, set `clop.sheet_sync: false`.
 
 **One caveat, by design.** Reading the alliance chat marks it read *for your account* — you
 will see it as read in your own browser too. That is the game's behaviour on the GET, not
@@ -552,10 +579,26 @@ The pony always shakes before minimizing or closing. Escalation is graduated, no
 Right-click the pony sprite to access:
 
 - **Directives** — view, add, or clear active goals
+- **Features** — the switches below, plus autonomous mode, desktop control, wake word, TTS
 - **Character** — hotswap between Mane 6 (instant sprite + personality switch)
 - **Scale** — resize the sprite (0.5x–4.0x)
 - **Audio devices** — switch mic/speaker
 - **Quit**
+
+Two switches under **Features** are worth knowing about:
+
+**Check On You (eaten? water? outside?)** — off by way of one click. When she has nothing else
+to say she picks an idle remark from one of two pools: the caretaker one (have you eaten, had
+water, been outside, what's on your plate) and the in-character one (what she is thinking
+about, an opinion, a complaint, a dare). Some people keep a desktop pony precisely for the
+first; to others it is the thing they were trying to get away from. Turning it off leaves only
+the second — she talks exactly as often, about herself instead of about your hydration.
+`agent.check_ins` in config.yaml.
+
+**Show What The Mic Heard** — the little italic panel that appears while she is thinking. It
+shows the *transcription*, which is a guess: Whisper mishears, and her reply makes more sense
+once you can see what she thought you said. A message you **typed** is never echoed back at
+all, switch or no switch — you watched yourself write it. `desktop_pet.heard_text`.
 
 ## Dependencies
 
