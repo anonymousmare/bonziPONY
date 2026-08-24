@@ -457,6 +457,19 @@ class ClopBridge:
 
     def _ensure_thread(self, force: bool = False) -> bool:
         """Point the client at the current thread. Returns False if none could be found."""
+        # A pinned URL wins outright: the user set it because she picked wrong, and going
+        # back to the catalog would just undo them.
+        pinned = (getattr(self.config, "thread_url", "") or "").strip()
+        if pinned:
+            try:
+                with self.lock:
+                    self.client.fourchan_thread = self.monitor.parse_fourchan_thread_url(pinned)
+                return True
+            except Exception as exc:
+                logger.warning("clop.thread_url is not a usable thread URL (%s): %s",
+                               pinned, exc)
+                # Fall through and find one rather than leaving her with nothing.
+
         if not self.config.thread_auto_find:
             return self.client.fourchan_thread is not None
 

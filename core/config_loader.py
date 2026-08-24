@@ -206,6 +206,10 @@ class ClopConfig:
     #: often than not -- and a stale one reads to the user as "she cannot check the thread".
     thread_auto_find: bool = True
     thread_board: str = "mlp"
+    #: Pin her to one thread instead of letting her find it. Empty means find it. Set from
+    #: the settings menu; it lives here rather than in the monitor's settings.json so the
+    #: vendored checkout stays untouched.
+    thread_url: str = ""
 
 
 @dataclass
@@ -447,6 +451,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             dossier_max_age_hours=float(clop_raw.get("dossier_max_age_hours", 6.0)),
             thread_auto_find=bool(clop_raw.get("thread_auto_find", True)),
             thread_board=str(clop_raw.get("thread_board", "mlp") or "mlp"),
+            thread_url=str(clop_raw.get("thread_url", "") or ""),
         ),
         auto_update=auto_update,
         presentation_mode=bool(presentation_mode),

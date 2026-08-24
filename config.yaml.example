@@ -145,3 +145,8 @@ clop:
                                # you never have to update a URL. Off, she uses only
                                # fourchan.thread_url in the monitor's settings.json.
   thread_board: "mlp"
+  thread_url: ""               # pin her to one thread instead of finding it, e.g.
+                               # "https://boards.4chan.org/mlp/thread/43454282".
+                               # Leave empty unless she picks the wrong one -- a thread
+                               # archives in a day or two and then this stops working.
+                               # Settable from the right-click menu: 4CLOP -> The /mlp/ Thread.

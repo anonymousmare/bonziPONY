@@ -230,6 +230,10 @@ The LLM embeds structured tags in its natural language response. `response_parse
 | `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:pollution:Oil Fracker:14]` |
 | `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
 
+Anything else in brackets and upper case is a command she invented. It is stripped rather
+than spoken, and the pipeline re-asks her once with the real list — she has no browser and
+no search, and `[BROWSE:...]` was reaching TTS.
+
 The lookups themselves are listed by `ToolRegistry.prompt_block()`, generated from `LOOKUPS`
 so the prompt can never offer one that is switched off or whose bridge is down. Live ones
 (`stockpiles`, `status`, `market`, `thread`, `nation`, `alliance`, `messages`,
@@ -403,7 +407,15 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     `ClopBridge.thread_posts` resolves on demand and re-resolves when a configured thread
     returns nothing, which is what archiving looks like from here.
 
-31. **The game's domain is what identifies its thread, not the word "clop".** /mlp/ uses
+31. **An invented tag is stripped *and* recovered from.** `_LEFTOVER_TAG_PATTERN` is an
+    allowlist of tags that exist, so a command she made up — `[BROWSE:4chan.org/mlp/]` —
+    used to survive it and be read out loud. `_UNKNOWN_TAG_PATTERN` catches any remaining
+    `[SHOUTING:...]` after the real tags are gone, records it on
+    `ParsedResponse.unknown_tags`, and strips it. `Pipeline._recover_invented_tag` then
+    re-asks once with the real lookup list, because nothing ran and the turn would
+    otherwise end on "one sec" with no follow-up. One round only, deliberately.
+
+32. **The game's domain is what identifies its thread, not the word "clop".** /mlp/ uses
     that word constantly and means pony pornography by it. Only the OP's link to
     `4clop.org` separates the general from a clopfic thread, so it is weighted to carry a
     match alone, and `\bclop\b` is word-bounded so "clopfic" scores nothing.
@@ -413,7 +425,7 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 101 tests: lorebook, lookups, dossier, settings, thread
+python -m unittest discover -s tests    # 113 tests: lorebook, lookups, dossier, settings, thread, tags
 cd clop_monitor && python -m unittest   # 615 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
