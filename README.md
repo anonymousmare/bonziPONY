@@ -255,11 +255,14 @@ CLOP_PASSWORD=your-4clop-password
 
 then set `enabled: true` under `clop:` in `config.yaml`.
 
-**Only those two.** The bundled monitor's `clop_monitor/.env.example` also asks for
-`CLOP_NATION` and `CLOP_WEBHOOK_URL` — those are for the planning-sheet sync and the Discord
-webhook, which only run if you start `clop_monitor.py` by itself. Leave them blank; she
-doesn't read them. Your login can live in `clop_monitor/.env` instead if you already put it
-there — she checks the environment first, then that file.
+**Those two are the login.** Your login can live in `clop_monitor/.env` instead if you already
+put it there — she checks the environment first, then that file.
+
+The bundled monitor's `clop_monitor/.env.example` asks for two more. `CLOP_NATION` names your
+tab in the shared planning sheet and is worth setting: she syncs that tab each poll, exactly as
+the standalone monitor does (see [the shared planning sheet](#looking-things-up) below).
+`CLOP_WEBHOOK_URL` is the Discord webhook, which only runs if you start `clop_monitor.py`
+yourself — leave it blank, she never reads it.
 
 Neither file is ever committed; both are git-ignored.
 

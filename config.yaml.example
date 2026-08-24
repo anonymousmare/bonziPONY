@@ -125,9 +125,10 @@ clop:
   # By hand: put these two lines in the .env file next to main.py --
   #     CLOP_USERNAME=your-4clop-username
   #     CLOP_PASSWORD=your-4clop-password
-  # Those two are the only ones she needs. The bundled monitor's own .env.example
-  # also asks for CLOP_NATION and CLOP_WEBHOOK_URL; both belong to features only
-  # the standalone monitor runs, so leave them blank.
+  # Those two are the login. The monitor's own .env.example asks for two more:
+  # CLOP_NATION names your tab in the shared planning sheet and turns the sheet
+  # sync on (see sheet_sync below) -- set it if you use the sheet. CLOP_WEBHOOK_URL
+  # belongs to the standalone monitor alone, so leave that one blank.
   # ──────────────────────────────────────────────────────────────────────────
   enabled: false               # turn on to run the 4CLOP monitor inside this process
   monitor_path: "clop_monitor"  # the bundled monitor. Point elsewhere for a dev checkout.
