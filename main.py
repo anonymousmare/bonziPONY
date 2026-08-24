@@ -631,8 +631,23 @@ def main() -> None:
     countdown = CountdownTimer()
     countdown.set_anchor_widget(pet_window)
 
-    notification_box = NotificationBox()
+    # What the user has muted. Held by three things at once -- the sink that filters alerts
+    # before they are ever stored, the box that filters what a previous run left behind, and
+    # the settings menu -- so a mute from any of them is immediately true for all of them.
+    from core.notify_filter import NotifyFilter
+
+    notify_filter = NotifyFilter()
+
+    notification_box = NotificationBox(notify_filter)
     notification_box.set_anchor_widget(pet_window)
+    # What it must not cover. Her bubble is the one that matters: it sits in exactly the same
+    # strip of screen, so an alert arriving mid-sentence used to land on top of what she was
+    # saying. The other two are below her and only come into it when the box is pushed down.
+    notification_box.set_avoid_widgets([speech_bubble, heard_text, countdown])
+    notification_box.set_typewriter_sound(
+        getattr(config.desktop_pet, "typewriter_sound", True))
+    menu_builder.notify_filter = notify_filter
+    menu_builder.notification_box = notification_box
 
     # ── Connect signals → slots ──────────────────────────────────────────────
 
@@ -779,11 +794,18 @@ def main() -> None:
             clop_cfg,
             on_notification=pet_controller.on_notification,
             unread=clop_unread,
+            notify_filter=notify_filter,
         )
         if clop_bridge.start():
             # Anything still unread from a previous run goes back in the box, so a restart
-            # does not quietly swallow what nobody has read yet.
+            # does not quietly swallow what nobody has read yet -- except what has been muted
+            # since it was stored, which is dropped for good here. Leaving it would mean the
+            # box filtering it out on every launch while the welcome-back catch-up still read
+            # it aloud, which is the nagging the mute was meant to stop.
             for _item in clop_unread.items:
+                if not notify_filter.allows(_item):
+                    clop_unread.mark_read(_item)
+                    continue
                 pet_controller.on_notification(_item)
             # What she already knows about other nations. Kept next to directives.json and
             # routines.json -- it is the same kind of thing: state that outlives the run.

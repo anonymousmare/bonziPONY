@@ -1,4 +1,14 @@
-"""Separate transparent window that shows comic-style speech bubbles."""
+"""Separate transparent window that shows what she just said.
+
+Painted from ``panel_style``, the same palette as the notification box and the heard-text
+overlay: a dark translucent rounded panel with a hairline border and light text. It used to be
+a white comic bubble with a 2px black outline, which sat two windows away from the notification
+box and read as belonging to a different program. The pointer triangle stays -- it is what says
+*she* said this, rather than the game -- and so does the typing animation.
+
+The pixel ("m5x7") style is untouched by any of that: it has no panel at all, just haloed text
+like a Minecraft nametag, which is the whole point of it.
+"""
 
 from __future__ import annotations
 
@@ -16,14 +26,21 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import QApplication, QWidget
 
 from desktop_pet.fonts import get_bubble_font, is_pixel_style
+from desktop_pet.panel_style import (
+    BORDER_WIDTH as _PANEL_BORDER_WIDTH,
+    PANEL_BG,
+    PANEL_BORDER,
+    RADIUS as _PANEL_RADIUS,
+    TEXT_BODY,
+)
 from desktop_pet.typewriter_sound import TypewriterSound
 
 logger = logging.getLogger(__name__)
 
 _BUBBLE_PADDING = 12
-_BUBBLE_RADIUS = 14
+_BUBBLE_RADIUS = _PANEL_RADIUS
 _POINTER_SIZE = 12
-_BORDER_WIDTH = 2
+_BORDER_WIDTH = _PANEL_BORDER_WIDTH
 _TYPING_SPEED_MS = 30  # ms per character
 _DISPLAY_DURATION_MS = 5000  # how long bubble stays after typing finishes
 _MAX_BUBBLE_WIDTH = 320
@@ -209,8 +226,8 @@ class SpeechBubble(QWidget):
             bubble_rect = QRectF(bubble_x, bubble_y, bubble_w, bubble_h)
             path.addRoundedRect(bubble_rect, _BUBBLE_RADIUS, _BUBBLE_RADIUS)
 
-            painter.setPen(QPen(QColor(60, 60, 60), _BORDER_WIDTH))
-            painter.setBrush(QColor(255, 255, 255, 240))
+            painter.setPen(QPen(PANEL_BORDER, _BORDER_WIDTH))
+            painter.setBrush(PANEL_BG)
             painter.drawPath(path)
 
             # Draw pointer triangle
@@ -229,17 +246,23 @@ class SpeechBubble(QWidget):
                 pointer_path.lineTo(ptr_cx + 6, py)
                 pointer_path.closeSubpath()
 
-            painter.setBrush(QColor(255, 255, 255, 240))
-            painter.setPen(QPen(QColor(60, 60, 60), _BORDER_WIDTH))
+            painter.setBrush(PANEL_BG)
+            painter.setPen(QPen(PANEL_BORDER, _BORDER_WIDTH))
             painter.drawPath(pointer_path)
 
-            # Fill over the pointer base to merge with bubble
+            # Fill over the pointer base to merge with bubble. The panel colour is
+            # translucent, so painting the seam a second time would show as a lighter
+            # band -- composition mode Source replaces those pixels instead of adding to
+            # them, which is what "there is no seam here" actually means.
+            painter.save()
+            painter.setCompositionMode(QPainter.CompositionMode_Source)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(255, 255, 255, 240))
+            painter.setBrush(PANEL_BG)
             if not self._pointer_below:
                 painter.drawRect(ptr_cx - 5, int(bubble_y), 10, 4)
             else:
                 painter.drawRect(ptr_cx - 5, int(py) - 4, 10, 4)
+            painter.restore()
 
         # Draw text with outline halo (pixel style) or subtle shadow (default)
         painter.setFont(self._font)
@@ -278,11 +301,9 @@ class SpeechBubble(QWidget):
                              Qt.TextWordWrap | Qt.AlignHCenter,
                              self._visible_text)
         else:
-            # Default: soft 1px drop shadow + dark text
-            painter.setPen(QColor(0, 0, 0, 80))
-            painter.drawText(text_draw_rect.translated(1, 1),
-                             Qt.TextWordWrap, self._visible_text)
-            painter.setPen(QColor(30, 30, 30))
+            # Default: light text on the shared dark panel. No drop shadow — a shadow under
+            # light text on a dark panel is just a smear.
+            painter.setPen(TEXT_BODY)
             painter.drawText(text_draw_rect, Qt.TextWordWrap, self._visible_text)
 
         painter.end()

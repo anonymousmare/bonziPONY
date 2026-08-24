@@ -45,7 +45,7 @@ main.py (bootstrap + wiring)
           ├─ desktop_pet/pet_window.py     sprite animation (~60fps)
           ├─ desktop_pet/speech_bubble.py  comic-style response display
           ├─ desktop_pet/heard_text.py     STT transcription overlay
-          ├─ desktop_pet/notification_box.py  relayed CLOP alerts, clickable
+          ├─ desktop_pet/notification_box.py  relayed CLOP alerts, clickable, dodges her bubble
           └─ desktop_pet/context_menu.py   right-click settings UI
 ```
 
@@ -74,6 +74,7 @@ main.py (bootstrap + wiring)
 | `pony_instance.py` | Per-character state bundle (GUI + LLM + sprites + config) | `PonyInstance` |
 | `clop_bridge.py` | Runs the CLOP monitor's poll loop in-process; alerts go to the box | `ClopBridge`, `PetSink` |
 | `clop_unread.py` | Unread notifications, deduplicated and persisted, for the catch-up | `UnreadStore` |
+| `notify_filter.py` | Which alert kinds and which goods she is allowed to mention | `NotifyFilter` |
 | `clop_tools.py` | The lookups she can ask for instead of guessing | `LOOKUPS`, `ToolRegistry` |
 | `clop_lore.py` | Game facts auto-injected when she mentions something | `context_for()` |
 | `clop_thread.py` | The hourly thread read and the cheap gate in front of it | `ThreadState`, `decide()` |
@@ -114,7 +115,9 @@ main.py (bootstrap + wiring)
 | `effect_renderer.py` | Overlay visual effects (Sonic Rainboom, etc.) |
 | `speech_bubble.py` | Comic-style bubble with typing animation, auto-hide, position tracking |
 | `heard_text.py` | Translucent STT transcription overlay below pony |
-| `notification_box.py` | Clickable alert panel above the pony, with a coloured trim and mark-as-read |
+| `notification_box.py` | Clickable alert panel, coloured trim, mark-as-read and mute, placed by `stacking` |
+| `panel_style.py` | The palette every floating panel is painted from — one dark panel, shared |
+| `stacking.py` | Where a panel goes when the space above the pony is taken. Pure maths, no Qt |
 | `context_menu.py` | Right-click menu: full in-app settings, directive viewer, 4CLOP login |
 | `countdown_timer.py` | On-screen timer widget for enforcement tasks |
 
@@ -180,10 +183,13 @@ ClopBridge poll thread (60s)
     → build_alerts(previous, current)      # pure; no Windows, no I/O
     → PetSink.notify(message, alerts)
       → alert_parts(alert)                 # {title, body, url, category, colour}
+      → payload["subject"] = alert.icon_key  # the good, which alert_parts drops
+      → NotifyFilter.allows(payload)?      # muted → dropped here, before it is ever stored
       → UnreadStore.add(payload)           # deduplicated; level alerts re-fire every poll
       → PetController.on_notification(payload)
         → notification_received signal (QueuedConnection)
           → NotificationBox.push(payload)  # main thread
+            → stacking.place(...)          # above her, or above her bubble, or beside her
   → _notice_market_nations(current)
     → dossier.notice(order.nation_id, ...)   # from the snapshot, not the alert text
 ```
@@ -422,10 +428,34 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     `tests/fixtures/mlp_catalog.json` is a real catalog response that keeps one such
     false positive on purpose.
 
+33. **Muting happens at the sink, not at the box.** A muted alert that reached the box would
+    already be in `UnreadStore`, and the welcome-back catch-up would read out the thing you
+    just said you never wanted to hear about. `PetSink.notify` asks `NotifyFilter.allows`
+    before `unread.add`. The box asks too, for the one case the sink cannot cover — payloads
+    restored from `clop_unread.json` that were stored before the mute existed — and `main.py`
+    marks those read on the way past so they stop coming back every launch.
+
+34. **A market alert's good is its `icon_key`, and `alert_parts` does not return it.** It
+    derives the trim colour from it and then drops it, so `PetSink` copies it onto the payload
+    as `subject`. Without that, "mute Copper" would have nothing to key on but the title.
+    `notify_filter.subject_of` parses the title as a fallback, for payloads persisted before
+    that key existed — and only for market alerts, because a battle report that *mentions*
+    copper is not a copper alert.
+
+35. **A translucent panel's seam cannot be painted twice.** The join between a bubble and its
+    pointer is filled over with the panel colour; at alpha 225 a second coat is a visibly
+    lighter band rather than a clean merge. `speech_bubble` and `heard_text` switch to
+    `CompositionMode_Source` for that one fill, which replaces those pixels instead of
+    compositing onto them.
+
+36. **The notification box holds still while the pointer is over it.** It re-places itself
+    30 times a second, so without that guard a speech bubble appearing while you are reaching
+    for "Mark as read" would slide the button out from under the click.
+
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 113 tests: lorebook, lookups, dossier, settings, thread, tags
+python -m unittest discover -s tests    # 150 tests: lorebook, lookups, dossier, settings, thread, tags, filters, placement
 cd clop_monitor && python -m unittest   # 615 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
@@ -435,6 +465,9 @@ and asserts `anthropic` was never imported — that is the claim it exists to pr
 callable and every tool in `make_live_tools` must have a row. It exists because the same bug
 happened twice — tools written, registered in one place, never connected to what calls them.
 Its `RenderingTests` class covers the other half: reachable and correct are two claims.
+`tests/test_stacking.py` asserts on coordinates rather than screenshots, which is the whole
+reason `desktop_pet/stacking.py` has no Qt in it: "did the alert land on top of her speech
+bubble" is a question with an arithmetic answer.
 For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM → TTS stages individually.
 
 ## Persistent State Files
@@ -444,6 +477,8 @@ For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM 
 | `directives.json` | AgentLoop | Yes | `{"directives": [...], "enforcement": null, "standing_rules": [...]}` |
 | `routines.json` | RoutineManager | Yes | `[{"id": ..., "schedule": ..., "goal": ..., ...}]` |
 | `clop_dossier.json` | DossierStore | Yes | `{"nations": {...}, "alliances": {...}, "seen": {...}}` |
+| `clop_unread.json` | UnreadStore | Yes | `{"unread": [...], "seen_total": {...}}` |
+| `notify_filters.json` | NotifyFilter (box + settings menu) | Yes | `{"categories": {...}, "subjects": [...]}` |
 | `wake_state.json` | RoutineManager | Yes | `{"wake_time": ISO, "last_active": ISO}` |
 | `memory/sessions.txt` | Pipeline (summarize_session) | Yes | Plain text, last 3 sessions |
 | `memory/user_profile.txt` | user_profile.py | Yes | Structured text |

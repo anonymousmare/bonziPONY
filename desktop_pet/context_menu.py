@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QAction, QActionGroup, QApplication, QComboBox, QDialog, QDialogButtonBox,
-    QDoubleSpinBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMenu, QMessageBox, QProgressDialog, QPushButton, QSpinBox, QTextEdit,
-    QVBoxLayout, QWidget,
+    QAction, QActionGroup, QApplication, QCheckBox, QComboBox, QDialog,
+    QDialogButtonBox, QDoubleSpinBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMenu, QMessageBox, QProgressDialog, QPushButton, QSpinBox,
+    QTextEdit, QVBoxLayout, QWidget,
 )
 
 if TYPE_CHECKING:
@@ -623,6 +623,109 @@ class _AddRoutineDialog(QDialog):
         )
 
 
+class _NotificationFilterDialog(QDialog):
+    """Which alerts reach the box: kinds by checkbox, goods by list.
+
+    The list of goods is what you have muted, not what exists -- there are dozens of goods and
+    you only ever want to silence the two or three you trade in yourself. It fills up from the
+    "Mute Copper" button on the notification itself, which is where anyone actually is at the
+    moment they decide they do not want to hear about copper again. This dialog is where it is
+    undone, and where a whole kind is switched off in one go.
+    """
+
+    def __init__(self, notify_filter, parent=None):
+        super().__init__(parent)
+        from core.notify_filter import CATEGORIES
+
+        self._filter = notify_filter
+        self.setWindowTitle("4CLOP Notifications")
+        self.setMinimumWidth(420)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+
+        layout = QVBoxLayout(self)
+
+        info = QLabel("Uncheck a kind to stop it reaching the box entirely.")
+        info.setWordWrap(True)
+        info.setStyleSheet("color: gray; font-style: italic;")
+        layout.addWidget(info)
+
+        self._boxes = {}
+        for key, label, _noun in CATEGORIES:
+            box = QCheckBox(label)
+            box.setChecked(notify_filter.category_enabled(key))
+            box.toggled.connect(lambda on, k=key: self._set_category(k, on))
+            self._boxes[key] = box
+            layout.addWidget(box)
+
+        goods_label = QLabel("Muted goods (market orders only):")
+        layout.addWidget(goods_label)
+
+        self._list = QListWidget()
+        layout.addWidget(self._list)
+
+        row = QHBoxLayout()
+        add_btn = QPushButton("Mute a good...")
+        add_btn.clicked.connect(self._add_good)
+        row.addWidget(add_btn)
+        remove_btn = QPushButton("Unmute Selected")
+        remove_btn.clicked.connect(self._remove_selected)
+        row.addWidget(remove_btn)
+        reset_btn = QPushButton("Show Everything")
+        reset_btn.clicked.connect(self._reset)
+        row.addWidget(reset_btn)
+        row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        row.addWidget(close_btn)
+        layout.addLayout(row)
+
+        self._refresh()
+
+    def _set_category(self, key: str, enabled: bool) -> None:
+        self._filter.set_category(key, enabled)
+
+    def _refresh(self) -> None:
+        self._list.clear()
+        goods = self._filter.muted_subjects()
+        if not goods:
+            item = QListWidgetItem("Nothing muted. Use the Mute button on a notification.")
+            item.setFlags(item.flags() & ~Qt.ItemIsSelectable)
+            self._list.addItem(item)
+            return
+        for good in goods:
+            item = QListWidgetItem(good)
+            item.setData(Qt.UserRole, good)
+            self._list.addItem(item)
+
+    def _add_good(self) -> None:
+        from PyQt5.QtWidgets import QInputDialog
+
+        name, ok = QInputDialog.getText(
+            self, "Mute a good",
+            "Good to stop hearing market orders for (e.g. Copper):",
+        )
+        if ok and name.strip():
+            self._filter.mute_subject(name.strip())
+            self._refresh()
+
+    def _remove_selected(self) -> None:
+        item = self._list.currentItem()
+        if item is None:
+            return
+        good = item.data(Qt.UserRole)
+        if good:
+            self._filter.unmute_subject(good)
+            self._refresh()
+
+    def _reset(self) -> None:
+        self._filter.unmute_all()
+        for key, box in self._boxes.items():
+            box.blockSignals(True)
+            box.setChecked(True)
+            box.blockSignals(False)
+        self._refresh()
+
+
 # ── Context menu builder ──────────────────────────────────────────────────
 
 class _OOCDialog(QDialog):
@@ -685,6 +788,8 @@ class ContextMenuBuilder:
         pony_instance=None,
         transcriber=None,
         clop_bridge=None,
+        notify_filter=None,
+        notification_box=None,
     ) -> None:
         self.config = config
         self.config_path = str(Path(config_path).resolve())
@@ -704,6 +809,11 @@ class ContextMenuBuilder:
         #: menu is built before the bridge tries to connect. Kept even when connecting
         #: failed, so the status line can say why rather than just "off".
         self.clop_bridge = clop_bridge
+        #: The ``core.notify_filter.NotifyFilter`` the sink and the box also hold. One object,
+        #: so a mute made from the box shows up checked off in this menu and vice versa.
+        self.notify_filter = notify_filter
+        #: The NotificationBox, so the typewriter toggle governs its pop sound too.
+        self.notification_box = notification_box
 
     # ── Main builder ──────────────────────────────────────────────────────
 
@@ -1117,13 +1227,20 @@ class ContextMenuBuilder:
             logger.debug("Font test bubble failed: %s", exc)
 
     def _set_typewriter_sound(self, enabled: bool) -> None:
-        """Toggle typewriter click on all live speech bubbles."""
+        """Toggle the typewriter click on every surface that makes one."""
         self._set("desktop_pet", "typewriter_sound", enabled)
         for sb in self._iter_speech_bubbles():
             try:
                 sb.set_typewriter_sound(enabled)
             except Exception as exc:
                 logger.debug("Typewriter toggle apply failed: %s", exc)
+        # The notification box clicks when an alert pops. One setting, both sounds --
+        # switching it off to stop the typing and still being clicked at would read as a bug.
+        if self.notification_box is not None:
+            try:
+                self.notification_box.set_typewriter_sound(enabled)
+            except Exception as exc:
+                logger.debug("Typewriter toggle on the notification box failed: %s", exc)
 
     def _set_read_only(self, enabled: bool, parent: QWidget) -> None:
         """Toggle read-only / safe mode. Flips safety.read_only_mode + disables
@@ -1625,6 +1742,8 @@ class ContextMenuBuilder:
 
         clop_menu.addSeparator()
 
+        self._build_notification_menu(clop_menu, parent)
+
         self._radio_submenu(clop_menu, "Speak Alerts", [
             ("Never (box only)", "never"),
             ("Important only", "high"),
@@ -1678,6 +1797,46 @@ class ContextMenuBuilder:
             getattr(cfg, "read_alliance_messages", True),
             lambda c: self._set_clop_alliance_chat(c, parent),
         )
+
+    def _build_notification_menu(self, clop_menu: QMenu, parent: QWidget) -> None:
+        """Which alerts reach the box, one click from the alerts themselves.
+
+        The kinds are toggles right here because switching off "news" should not cost a
+        dialog; the goods live in the dialog because the list is however long you have made
+        it and a menu is the wrong shape for that.
+        """
+        nf = self.notify_filter
+        if nf is None:
+            return
+
+        from core.notify_filter import CATEGORIES
+
+        notif_menu = clop_menu.addMenu("Notifications")
+        summary = notif_menu.addAction(nf.summary())
+        summary.setEnabled(False)
+        notif_menu.addSeparator()
+
+        for key, label, _noun in CATEGORIES:
+            self._add_toggle(
+                notif_menu, label, nf.category_enabled(key),
+                lambda on, k=key: nf.set_category(k, on),
+            )
+
+        notif_menu.addSeparator()
+        muted_goods = nf.muted_subjects()
+        if muted_goods:
+            shown = ", ".join(muted_goods[:3])
+            if len(muted_goods) > 3:
+                shown += f" +{len(muted_goods) - 3} more"
+            label = notif_menu.addAction(f"Muted goods: {shown}")
+            label.setEnabled(False)
+        notif_menu.addAction("Muted Goods & Kinds...").triggered.connect(
+            lambda: self._show_notification_filters(parent))
+
+    def _show_notification_filters(self, parent: QWidget) -> None:
+        if self.notify_filter is None:
+            return
+        _NotificationFilterDialog(self.notify_filter, parent).exec_()
 
     def _clop_thread_description(self) -> str:
         bridge = self.clop_bridge

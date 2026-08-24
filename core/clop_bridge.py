@@ -85,11 +85,17 @@ class PetSink:
         on_notification: Callable[[Dict[str, Any]], None],
         unread=None,
         on_failure: Optional[Callable[[str], None]] = None,
+        notify_filter=None,
     ) -> None:
         self._monitor = monitor
         self._on_notification = on_notification
         self._unread = unread
         self._on_failure = on_failure
+        #: What the user has muted, or None for "show everything". Asked here rather than in
+        #: the box so a muted alert never reaches the unread store either -- it would
+        #: otherwise come back in the welcome-back catch-up, which is the same nagging by
+        #: another route.
+        self._filter = notify_filter
 
     def notify(self, message: str, alerts=None) -> bool:
         if not alerts:
@@ -102,6 +108,12 @@ class PetSink:
                 logger.warning("Could not render an alert (%s); passing the text through", exc)
                 payload = {"title": "CLOP monitor", "body": str(alert),
                            "url": None, "category": "other", "colour": None}
+            # Which good a market alert is about. alert_parts derives the trim colour from
+            # icon_key and then drops it, and "mute Copper" needs the name itself.
+            payload["subject"] = str(getattr(alert, "icon_key", "") or "")
+            if self._filter is not None and not self._filter.allows(payload):
+                logger.debug("Muted: %s", payload.get("title"))
+                continue
             if self._unread is not None:
                 self._unread.add(payload)
             try:
@@ -129,11 +141,16 @@ class ClopBridge:
         on_notification: Callable[[Dict[str, Any]], None],
         unread=None,
         on_failure: Optional[Callable[[str], None]] = None,
+        notify_filter=None,
     ) -> None:
         self.config = clop_config
         self._on_notification = on_notification
         self._unread = unread
         self._on_failure = on_failure
+        #: A ``core.notify_filter.NotifyFilter``, or None. Handed to the sink; the settings
+        #: menu and the box hold the same object, so a mute takes effect on the next poll
+        #: without a restart.
+        self.notify_filter = notify_filter
 
         from core import clop_dossier
 
@@ -267,7 +284,8 @@ class ClopBridge:
 
     def _run(self) -> None:
         monitor = self.monitor
-        sink = PetSink(monitor, self._on_notification, self._unread, self._on_failure)
+        sink = PetSink(monitor, self._on_notification, self._unread, self._on_failure,
+                       self.notify_filter)
         interval = max(MIN_INTERVAL_S, int(self.config.poll_interval_s))
         state_path = self._path(self.config.state_file, ".state", "clop-monitor.json")
 
