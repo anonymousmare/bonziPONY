@@ -109,12 +109,24 @@ tts:
   # sample_rate: 24000
 
 clop:
+  # ── Your game login does NOT go in this file. ──────────────────────────────
+  # Easiest way: right-click her -> 4CLOP -> Set Login. That writes it for you
+  # and tells you whether she managed to log in.
+  #
+  # By hand: put these two lines in the .env file next to main.py --
+  #     CLOP_USERNAME=your-4clop-username
+  #     CLOP_PASSWORD=your-4clop-password
+  # Those two are the only ones she needs. The bundled monitor's own .env.example
+  # also asks for CLOP_NATION and CLOP_WEBHOOK_URL; both belong to features only
+  # the standalone monitor runs, so leave them blank.
+  # ──────────────────────────────────────────────────────────────────────────
   enabled: false               # turn on to run the 4CLOP monitor inside this process
   monitor_path: "clop_monitor"  # the bundled monitor. Point elsewhere for a dev checkout.
   base_url: "https://4clop.org/"
   # Left unset, these use the monitor checkout's own files:
   # settings_file: null        # defaults to <monitor_path>/settings.json
-  # env_file: null             # defaults to <monitor_path>/.env  (CLOP_USERNAME/CLOP_PASSWORD)
+  # env_file: null             # names the file the login is READ from if it is not in the
+  #                            # environment; defaults to <monitor_path>/.env
   # state_file: null           # defaults to <monitor_path>/.state/clop-monitor.json
   poll_interval_s: 60          # minimum 15 — it polls someone else's server
   speak_notifications: "never" # never | high | always.  The box is silent by default: at a
