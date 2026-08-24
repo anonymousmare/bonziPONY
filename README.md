@@ -227,7 +227,36 @@ audio:
 
 Use `-1` for system defaults if you don't care or only have one of each.
 
-### Step 4: Run
+### Step 4: Connect her to 4CLOP
+
+Skip this if you just want the desktop pet — everything else works without it.
+
+**The easy way.** Start her, right-click her, and go to **4CLOP → Set Login**. Type your game
+username and password. She'll offer to switch the feature on, then restart her.
+
+The same menu shows you what state she's in at a glance — *"Watching the game as yourname"*,
+*"Off — no login set yet"*, or the actual error if the login was refused. Speaking alerts
+aloud, strategy thoughts, how often she reads the thread, and alliance chat are all in there
+too.
+
+**The by-hand way.** Two lines in the `.env` file next to `main.py`:
+
+```
+CLOP_USERNAME=your-4clop-username
+CLOP_PASSWORD=your-4clop-password
+```
+
+then set `enabled: true` under `clop:` in `config.yaml`.
+
+**Only those two.** The bundled monitor's `clop_monitor/.env.example` also asks for
+`CLOP_NATION` and `CLOP_WEBHOOK_URL` — those are for the planning-sheet sync and the Discord
+webhook, which only run if you start `clop_monitor.py` by itself. Leave them blank; she
+doesn't read them. Your login can live in `clop_monitor/.env` instead if you already put it
+there — she checks the environment first, then that file.
+
+Neither file is ever committed; both are git-ignored.
+
+### Step 5: Run
 
 ```bash
 python main.py
@@ -568,9 +597,16 @@ python clop_monitor.py --once     # poll once and exit
 python -m unittest                # its own 615 tests
 ```
 
-Credentials and watched goods live in `clop_monitor/.env` and `clop_monitor/settings.json`
-(copy the `.example` files). The pet reads the same two files, so configuring one configures
-both. `clop.monitor_path` in `config.yaml` can point somewhere else if you keep a development
+Watched goods, alert filters and the /mlp/ thread URL live in `clop_monitor/settings.json`
+(copy `settings.example.json`). She reads that same file, so configuring it configures both.
+
+The login is the one thing that differs. Standalone, it reads `clop_monitor/.env`. Running as
+the pet, she checks the environment first — which is what `.env` next to `main.py` and the
+right-click menu both feed — and falls back to `clop_monitor/.env` if nothing is set there. So
+a login you already have in the monitor's own file keeps working, and one you set from her
+menu takes precedence over it.
+
+`clop.monitor_path` in `config.yaml` can point somewhere else if you keep a development
 checkout.
 
 ## Refreshing the CLOP game data

@@ -114,7 +114,7 @@ main.py (bootstrap + wiring)
 | `speech_bubble.py` | Comic-style bubble with typing animation, auto-hide, position tracking |
 | `heard_text.py` | Translucent STT transcription overlay below pony |
 | `notification_box.py` | Clickable alert panel above the pony, with a coloured trim and mark-as-read |
-| `context_menu.py` | Right-click menu: full in-app settings, directive viewer |
+| `context_menu.py` | Right-click menu: full in-app settings, directive viewer, 4CLOP login |
 | `countdown_timer.py` | On-screen timer widget for enforcement tasks |
 
 ### stt/ — Speech-to-text
@@ -376,10 +376,28 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     from config; the lookup layer asks for the store with no opinion. An unconditional
     assignment there quietly reset a configured staleness window back to the default.
 
+27. **The CLOP login has no home in `config.yaml`, on purpose.** `ClopConfig` has no
+    username/password field. `ClopBridge.connect` reads `os.environ` first (fed by
+    `load_dotenv()` in `main.py` from the root `.env`), then `<monitor_path>/.env`. The
+    settings menu writes the root `.env` and never touches the monitor's copy, so a
+    vendored checkout stays exactly as upstream shipped it. `config.yaml`'s `env_file` names
+    where the login is *read from*, not somewhere to put it — a comment implying otherwise
+    is what sent one user looking in the wrong file.
+
+28. **`_save_env_value` edits the file that holds the user's API keys.** A bug there eats a
+    key silently rather than failing. `tests/test_clop_settings.py` asserts on the
+    surrounding lines, not just the line being written, and pins that set-then-clear
+    restores the file byte for byte.
+
+29. **Only `CLOP_USERNAME` and `CLOP_PASSWORD` matter to the pet.** `CLOP_NATION` is read
+    solely by `clop_monitor/sheets.py` (the planning-sheet sync) and `CLOP_WEBHOOK_URL`
+    solely by the monitor's own `main()`. Neither runs in-process, so the monitor's
+    `.env.example` overstates what is required when it is running as her.
+
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 58 tests: lorebook, lookups, dossier
+python -m unittest discover -s tests    # 80 tests: lorebook, lookups, dossier, settings
 cd clop_monitor && python -m unittest   # 615 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
@@ -404,3 +422,4 @@ For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM 
 | `memory/user_events.txt` | user_profile.py | Yes | Structured text |
 | `diary/*.txt` | diary.py | Yes | Timestamped journal entries |
 | `config.yaml` | context_menu.py (settings UI) | Yes | YAML with comments |
+| `.env` | context_menu.py (4CLOP login) | Yes | `NAME=VALUE`; also holds LLM/TTS keys |

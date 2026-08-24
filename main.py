@@ -835,8 +835,13 @@ def main() -> None:
                     agent_loop.routine_manager.save()
             logger.info("CLOP bridge running — polling every %ds", clop_cfg.poll_interval_s)
         else:
-            clop_bridge = None
+            # Deliberately kept rather than dropped: the settings menu reads last_error to
+            # say *why* she is not watching the game, which is the whole difference between
+            # "off" and "your password is wrong".
             logger.warning("CLOP bridge unavailable; continuing without CLOP features")
+
+    # The menu is built before any of this runs, so the bridge is handed over afterwards.
+    menu_builder.clop_bridge = clop_bridge
 
     # Marking one read in the box is what marks it read in the store. The box is the only
     # place that knows the user actually saw it.

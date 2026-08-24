@@ -25,6 +25,58 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# ── .env persistence ───────────────────────────────────────────────────────
+
+def _save_env_value(name: str, value: str, env_path: str = ".env") -> bool:
+    """Set one NAME=VALUE in bonziPONY's own .env, leaving every other line alone.
+
+    The CLOP login lives here rather than in config.yaml for two reasons: config.yaml is
+    rewritten by this settings UI whenever anything else changes, and `.env` is already
+    git-ignored and already the thing `main.py` loads at startup. `ClopBridge.connect`
+    reads `os.environ` before it reads any file, so what is written here wins.
+
+    An empty value removes the line entirely rather than leaving `NAME=` behind, so
+    "clear my login" really clears it.
+
+    Returns True if the file was written.
+    """
+    try:
+        path = Path(env_path).resolve()
+        lines = path.read_text(encoding="utf-8").splitlines(True) if path.exists() else []
+
+        replaced = False
+        kept = []
+        for line in lines:
+            stripped = line.strip()
+            bare = stripped[7:].lstrip() if stripped.startswith("export ") else stripped
+            if not stripped.startswith("#") and bare.split("=", 1)[0].strip() == name:
+                if not value:
+                    continue          # drop the line: cleared means gone, not blank
+                if replaced:
+                    continue          # a duplicate of a key we have already rewritten
+                kept.append(f"{name}={value}\n")
+                replaced = True
+                continue
+            kept.append(line)
+
+        if value and not replaced:
+            if kept and not kept[-1].endswith("\n"):
+                kept[-1] += "\n"
+            kept.append(f"{name}={value}\n")
+
+        path.write_text("".join(kept), encoding="utf-8")
+        # So anything constructed later in this process sees it without a file re-read.
+        if value:
+            os.environ[name] = value
+        else:
+            os.environ.pop(name, None)
+        return True
+    except OSError as exc:
+        # Never log the value -- one of these is a password.
+        logger.warning("Could not write %s to %s: %s", name, env_path, exc)
+        return False
+
+
 # ── YAML persistence (line-level, preserves comments) ──────────────────────
 
 def _save_yaml_value(key_path: str, value, config_path: str = "config.yaml") -> None:
@@ -632,6 +684,7 @@ class ContextMenuBuilder:
         pony_manager=None,
         pony_instance=None,
         transcriber=None,
+        clop_bridge=None,
     ) -> None:
         self.config = config
         self.config_path = str(Path(config_path).resolve())
@@ -647,6 +700,10 @@ class ContextMenuBuilder:
         self.pony_manager = pony_manager      # PonyManager or None
         self.pony_instance = pony_instance    # which PonyInstance this menu belongs to
         self.transcriber = transcriber        # for speaker verification enrollment
+        #: The running ClopBridge, or None. Assigned by main.py after startup, because the
+        #: menu is built before the bridge tries to connect. Kept even when connecting
+        #: failed, so the status line can say why rather than just "off".
+        self.clop_bridge = clop_bridge
 
     # ── Main builder ──────────────────────────────────────────────────────
 
@@ -766,6 +823,9 @@ class ContextMenuBuilder:
             ("API (LLM)", "api"),
             ("Moondream (Local)", "moondream"),
         ], cfg.vision.screen_vision, lambda v: self._set_screen_vision(v))
+
+        # ── 4CLOP submenu ─────────────────────────────────────────────
+        self._build_clop_menu(menu, parent)
 
         menu.addSeparator()
 
@@ -1476,6 +1536,222 @@ class ContextMenuBuilder:
         logger.info("LLM prefill updated to: %s", text[:50] if text else "(default)")
 
     # ── Secondary pony menu ──────────────────────────────────────────────
+
+    # ── 4CLOP ─────────────────────────────────────────────────────────────
+
+    #: Only these two are read by the pet. The monitor's own .env.example also asks for
+    #: CLOP_NATION and CLOP_WEBHOOK_URL, which belong to features only the standalone
+    #: monitor runs (the planning-sheet sync and its Discord webhook) -- leaving them
+    #: blank costs nothing here.
+    CLOP_ENV_KEYS = ("CLOP_USERNAME", "CLOP_PASSWORD")
+
+    def _clop_credentials(self) -> Tuple[str, str, str]:
+        """The login currently in effect, and where it came from.
+
+        Mirrors the order `ClopBridge.connect` resolves them in, so what this reports is
+        what she will actually try to log in with -- not a guess at it.
+        """
+        user = os.environ.get("CLOP_USERNAME", "")
+        password = os.environ.get("CLOP_PASSWORD", "")
+        if user and password:
+            source = ".env" if Path(".env").exists() else "the environment"
+            return user, password, source
+
+        # Fall back to the monitor's own file, which is what the bridge reads next. Read
+        # only -- this menu never writes there.
+        try:
+            env_file = Path(getattr(self.config.clop, "monitor_path", "clop_monitor")) / ".env"
+            if env_file.exists():
+                found = {}
+                for line in env_file.read_text(encoding="utf-8-sig").splitlines():
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    name, _, value = line.partition("=")
+                    found[name.strip()] = value.strip()
+                user = user or found.get("CLOP_USERNAME", "")
+                password = password or found.get("CLOP_PASSWORD", "")
+                if user and password:
+                    return user, password, str(env_file)
+        except OSError:
+            pass
+        return user, password, ""
+
+    def _clop_status(self) -> str:
+        """One line saying whether she is actually watching the game, and if not, why."""
+        cfg = getattr(self.config, "clop", None)
+        bridge = self.clop_bridge
+        user, password, source = self._clop_credentials()
+
+        if bridge is not None and getattr(bridge, "available", False):
+            return f"Watching the game as {user or 'your account'}"
+        if not (cfg and cfg.enabled):
+            if user and password:
+                return "Off — login is set, switch Enabled on and restart"
+            return "Off — no login set yet"
+        if not user or not password:
+            missing = " and ".join(k for k, v in
+                                   (("username", user), ("password", password)) if not v)
+            return f"Enabled, but no {missing} — use Set Login"
+        error = getattr(bridge, "last_error", "") if bridge else ""
+        if error:
+            return f"Could not connect: {error[:70]}"
+        return "Enabled — restart to connect"
+
+    def _build_clop_menu(self, menu: QMenu, parent: QWidget) -> None:
+        cfg = getattr(self.config, "clop", None)
+        if cfg is None:
+            return
+
+        clop_menu = menu.addMenu("4CLOP")
+
+        status = clop_menu.addAction(self._clop_status())
+        status.setEnabled(False)
+
+        user, password, source = self._clop_credentials()
+        if user and password and source:
+            where = clop_menu.addAction(f"Login from {source}")
+            where.setEnabled(False)
+
+        clop_menu.addSeparator()
+
+        self._add_toggle(clop_menu, "Enabled (restart needed)", cfg.enabled,
+                         lambda c: self._set("clop", "enabled", c))
+        clop_menu.addAction("Set Login...").triggered.connect(
+            lambda: self._set_clop_login(parent))
+        if user or password:
+            clop_menu.addAction("Clear Login").triggered.connect(
+                lambda: self._clear_clop_login(parent))
+
+        clop_menu.addSeparator()
+
+        self._radio_submenu(clop_menu, "Speak Alerts", [
+            ("Never (box only)", "never"),
+            ("Important only", "high"),
+            ("Always", "always"),
+        ], cfg.speak_notifications, lambda v: self._set("clop", "speak_notifications", v))
+
+        self._radio_submenu(clop_menu, "Strategy Thoughts", [
+            ("Off", "off"),
+            ("Rare", "rare"),
+            ("On", "on"),
+        ], cfg.strategy_thoughts, lambda v: self._set("clop", "strategy_thoughts", v))
+
+        self._radio_submenu(clop_menu, "Read the /mlp/ Thread", [
+            ("Off", 0.0),
+            ("Every 30 min", 0.5),
+            ("Hourly", 1.0),
+            ("Every 2 hours", 2.0),
+            ("Every 4 hours", 4.0),
+        ], cfg.thread_check_hours,
+            lambda v: self._set("clop", "thread_check_hours", v))
+
+        # Reading alliance chat marks it read for the account -- in the user's own browser
+        # too. That is the game's behaviour on the GET, not something this adds, but it is
+        # surprising enough to spell out at the point of switching it on.
+        self._add_toggle(
+            clop_menu, "Read Alliance Chat (marks it read)",
+            getattr(cfg, "read_alliance_messages", True),
+            lambda c: self._set_clop_alliance_chat(c, parent),
+        )
+
+    def _set_clop_alliance_chat(self, checked: bool, parent: QWidget) -> None:
+        if checked:
+            answer = QMessageBox.question(
+                parent, "Read Alliance Chat?",
+                "Opening the alliance chat marks the whole thing read for your account —\n"
+                "it will look read in your own browser too. That is how the game behaves\n"
+                "when the page is fetched.\n\n"
+                "On, she can tell you what was said. Off, only how many messages there are.\n\n"
+                "Turn it on?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        self._set("clop", "read_alliance_messages", checked)
+
+    def _set_clop_login(self, parent: QWidget) -> None:
+        """Ask for the 4CLOP username and password and write them to bonziPONY's .env."""
+        from PyQt5.QtWidgets import QInputDialog
+
+        current_user, _, _ = self._clop_credentials()
+        user, ok = QInputDialog.getText(
+            parent, "4CLOP Login",
+            "Your 4CLOP username (the account you log in to the game with):",
+            QLineEdit.Normal, current_user,
+        )
+        if not ok:
+            return
+        user = user.strip()
+
+        password, ok = QInputDialog.getText(
+            parent, "4CLOP Login",
+            "Your 4CLOP password.\n\n"
+            "Saved to this folder's .env file, which is git-ignored.\n"
+            "Only your username and password are needed — nothing else in the\n"
+            "monitor's .env.example applies when she runs it for you.",
+            QLineEdit.Password, "",
+        )
+        if not ok:
+            return
+        password = password.strip()
+
+        if not user or not password:
+            QMessageBox.warning(
+                parent, "4CLOP Login",
+                "Both a username and a password are needed. Nothing was saved.")
+            return
+
+        written = all(_save_env_value(name, value) for name, value in
+                      zip(self.CLOP_ENV_KEYS, (user, password)))
+        if not written:
+            QMessageBox.warning(
+                parent, "4CLOP Login",
+                "Could not write to .env. Check the folder is not read-only.")
+            return
+
+        # Never log the password, and never put it in a message box.
+        logger.info("4CLOP login saved for user %s", user)
+
+        if not self.config.clop.enabled:
+            answer = QMessageBox.question(
+                parent, "4CLOP Login Saved",
+                f"Saved the login for {user}.\n\n"
+                "4CLOP is currently switched off. Turn it on now?\n"
+                "(It starts watching the game the next time you restart.)",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                self._set("clop", "enabled", True)
+                QMessageBox.information(
+                    parent, "4CLOP", "Switched on. Restart her to start watching.")
+            return
+
+        QMessageBox.information(
+            parent, "4CLOP Login Saved",
+            f"Saved the login for {user}.\n\nRestart her to connect.")
+
+    def _clear_clop_login(self, parent: QWidget) -> None:
+        answer = QMessageBox.question(
+            parent, "Clear 4CLOP Login",
+            "Remove the saved 4CLOP username and password from .env?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        for name in self.CLOP_ENV_KEYS:
+            _save_env_value(name, "")
+        logger.info("4CLOP login cleared.")
+
+        _, _, source = self._clop_credentials()
+        if source:
+            # Something is still supplying a login that this menu does not own.
+            QMessageBox.information(
+                parent, "4CLOP",
+                f"Cleared from .env, but a login is still coming from {source}.\n"
+                "Edit that file directly if you want it gone as well.")
+        else:
+            QMessageBox.information(parent, "4CLOP", "Login cleared.")
 
     def _build_secondary_menu(self, menu: QMenu, parent: QWidget) -> QMenu:
         """Build a lightweight menu for secondary pony windows."""
