@@ -219,7 +219,9 @@ ClopBridge poll thread (60s)
     → roster stale?  → ClopBridge.refresh_roster()
       → rankings.php?mode=saddle|zebrica|burrozil|przewalskia   (public, per region)
         → clop_pages.parse_rankings(html) → RosterStore.record(region, rows)
-    → group by region, or filter by region, or search name then owner
+    → a region? → that roster
+    → split_place("Central Zebrica")? → that band of it
+    → otherwise search name, then owner
 ```
 
 ### Handing a battle to the page
@@ -264,7 +266,7 @@ The LLM embeds structured tags in its natural language response. `response_parse
 | `[MOVETO:region]` | Move pony to screen area | `[MOVETO:top_left]` |
 | `[RULE:description]` | Create standing behavioral rule | `[RULE:quit porn]` |
 | `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:pollution:Oil Fracker:14]` |
-| `[LOOKUP:nations:x]` | Who exists: the whole roster, a region, or a search | `[LOOKUP:nations]`, `[LOOKUP:nations:Silverspire]` |
+| `[LOOKUP:nations:x]` | Who exists: the roster, a region, a part of one, or a search | `[LOOKUP:nations]`, `[LOOKUP:nations:Central Zebrica]` |
 | `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
 
 Anything else in brackets and upper case is a command she invented. It is stripped rather
@@ -521,53 +523,59 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     across the sync, so a hung endpoint can make her slow to answer a live lookup for as long
     as the retries take.
 
-41. **Two processes must not write one tab.** Nothing detects it — `clop.sheet_sync: false` is
+41. **"Central Zebrica" is a place, not a nation.** It is the heading `viewnation.php` puts
+    on a nation, so it is how people — and she — ask about one. Asking for it used to come
+    back as "no nation or player called that", which cost a whole lookup round in a turn the
+    user was waiting on. `clop_roster.split_place` takes it, in either word order, and only
+    when the *whole* term is a place: "North Star" still reaches the name search.
+
+42. **Two processes must not write one tab.** Nothing detects it — `clop.sheet_sync: false` is
     the switch for running `clop_monitor.py` yourself instead.
 
-42. **A typed message is never echoed back.** `Pipeline._run_turn` takes `typed=True` from
+43. **A typed message is never echoed back.** `Pipeline._run_turn` takes `typed=True` from
     `run_text_conversation` and skips the heard-text overlay for it. The overlay exists to
     show what the microphone *heard* — a guess worth checking, because the reply only makes
     sense once you know what she thinks you said. What the user typed is not a guess, and
     showing it put a bubble on screen quoting the sentence they had just finished writing.
     `desktop_pet.heard_text` switches off the speech case as well.
 
-43. **The heard-text pointer flips with the panel.** She is pinned bottom-right by default,
+44. **The heard-text pointer flips with the panel.** She is pinned bottom-right by default,
     so there is no room under her and `_reposition` puts the panel above instead — which was
     every single time, with a pointer still aimed at the ceiling. `_pointer_up` is set there
     and read in `paintEvent`, which is why the flip calls `update()`: the pointer is painted,
     not laid out.
 
-44. **`agent.check_ins` picks a pool, not a frequency.** `_CHECKIN_PROMPTS` is the caretaker
+45. **`agent.check_ins` picks a pool, not a frequency.** `_CHECKIN_PROMPTS` is the caretaker
     half (eaten, water, outside, what's on your plate) and `_FLAVOUR_PROMPTS` is the
     in-character half. Off means idle remarks are drawn from the second list only — she talks
     exactly as often. Keep the halves split on that axis; `tests/test_idle_prompts.py` fails
     if a caretaking line lands in the flavour list.
 
-45. **An equipment name the warcalc page does not know fails silently.** `makeRow` leaves
+46. **An equipment name the warcalc page does not know fails silently.** `makeRow` leaves
     the select empty and the unit ends up with scrounged gear — no error, just a different
     battle from the one she read out. `warcalc_page` maps names itself (the page spells
     "Grid Squares" as `GridSquares`; that is the whole difference), reports anything it could
     not map so she can say so, and `tests/test_warcalc_page.py` checks its tables against the
     page's own and against every name in `gamedata.json`.
 
-46. **The warcalc page opens from a conversation only.** `Pipeline._resolve_lookups` passes
+47. **The warcalc page opens from a conversation only.** `Pipeline._resolve_lookups` passes
     `show_page`; `AgentLoop._resolve_lookups` never does. A browser window appearing over a
     full-screen game because she was thinking to herself is not a feature.
 
-47. **The battle rides in the URL fragment, on the one canonical file.** A fragment is never
+48. **The battle rides in the URL fragment, on the one canonical file.** A fragment is never
     sent to a server, and `file://` has no server anyway — nothing about the user's game
     leaves the machine. Writing a per-battle copy of the page instead would also work, and
     would cost the user their saved armies: `localStorage` is per file, so their presets live
     with `tools/warcalc.html` itself.
 
-48. **The notification box holds still while the pointer is over it.** It re-places itself
+49. **The notification box holds still while the pointer is over it.** It re-places itself
     30 times a second, so without that guard a speech bubble appearing while you are reaching
     for "Mark as read" would slide the button out from under the click.
 
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 204 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement,
+python -m unittest discover -s tests    # 214 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement,
 idle prompts, warcalc handover
 cd clop_monitor && python -m unittest   # 627 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else

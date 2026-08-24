@@ -19,7 +19,13 @@ sys.path.insert(0, str(ROOT / "clop_monitor"))
 
 from clop_pages import parse_nation, parse_rankings
 from core import clop_dossier, clop_roster
-from core.clop_roster import REGION_MODES, RosterStore, mode_for_region, modes
+from core.clop_roster import (
+    REGION_MODES,
+    RosterStore,
+    mode_for_region,
+    modes,
+    split_place,
+)
 
 FIXTURES = ROOT / "clop_monitor" / "fixtures"
 
@@ -60,6 +66,35 @@ class ModeTests(unittest.TestCase):
             self.assertIn(mode, every)
 
 
+class PlaceTests(unittest.TestCase):
+    """"Central Zebrica" is the game's own phrasing, so it has to be a question she can take.
+
+    It is the heading viewnation.php puts on a nation. Asking for it came back as "no nation
+    or player called 'Central Zebrica'", which is both wrong-sounding and a wasted lookup
+    round in a turn the user is waiting on.
+    """
+
+    def test_a_band_and_a_region_in_either_order(self):
+        self.assertEqual(split_place("Central Zebrica"), ("Central", "Zebrica"))
+        self.assertEqual(split_place("Zebrica Central"), ("Central", "Zebrica"))
+
+    def test_case_and_two_word_regions(self):
+        self.assertEqual(split_place("north saddle arabia"), ("North", "Saddle Arabia"))
+
+    def test_a_band_on_its_own_means_all_four_regions(self):
+        self.assertEqual(split_place("Central"), ("Central", ""))
+
+    def test_a_name_that_merely_starts_with_a_band_is_not_a_place(self):
+        # Otherwise a nation called North Star becomes an empty region listing instead of
+        # being found.
+        self.assertIsNone(split_place("North Star"))
+
+    def test_a_region_alone_is_not_a_place(self):
+        # It is handled a step earlier, as a region; a band is what makes this a place.
+        self.assertIsNone(split_place("Zebrica"))
+        self.assertIsNone(split_place("nowhere"))
+
+
 class StoreTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -98,6 +133,18 @@ class StoreTests(unittest.TestCase):
         self.assertEqual([e["nation_id"] for e in only.find("mare")], [1])
         self.assertEqual([e["nation_id"] for e in only.find("marec")], [2])   # prefix
         self.assertEqual(len(only.find("are")), 3)                            # substring
+
+    def test_a_band_narrows_a_region(self):
+        rows = self.store.in_place("South", "Burrozil")
+        self.assertTrue(rows)
+        self.assertEqual({e["subregion"] for e in rows}, {"South"})
+        self.assertLess(len(rows), len(self.store.in_region("Burrozil")))
+
+    def test_a_band_with_no_region_spans_what_is_on_file(self):
+        self.assertEqual(
+            len(self.store.in_place("North")),
+            len([e for e in self.store.nations if e["subregion"] == "North"]),
+        )
 
     def test_a_player_can_be_searched_for_too(self):
         # Players talk about each other by handle at least as often as by nation name.
@@ -209,6 +256,24 @@ class LookupTests(unittest.TestCase):
         answer = self.registry.dispatch("nations:Mareconesia")
         self.assertIn("One match", answer)
         self.assertIn("#49", answer)
+
+    def test_a_part_of_a_region_is_a_question_she_can_take(self):
+        """The exact lookup from the log that came back empty."""
+        answer = self.registry.dispatch("nations:Central Zebrica")
+        self.assertNotIn("No nation", answer)
+        self.assertIn("Central Zebrica, 4 nation(s)", answer)
+        self.assertIn("Vladihoofstock (#16)", answer)
+
+    def test_a_band_alone_spans_every_region(self):
+        answer = self.registry.dispatch("nations:Central")
+        self.assertIn("every region", answer)
+        self.assertIn("Saddle Arabia", answer)
+        self.assertIn("Burrozil", answer)
+
+    def test_a_name_starting_with_a_band_is_still_searched_as_a_name(self):
+        answer = self.registry.dispatch("nations:North Star")
+        self.assertIn("No nation or player called", answer)
+        self.assertIn("North/Central/South", answer)
 
     def test_an_unknown_name_says_so_rather_than_inventing_one(self):
         answer = self.registry.dispatch("nations:Equestria")

@@ -26,7 +26,7 @@ import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,12 @@ REGION_MODES: Dict[str, str] = {
     "Burrozil": "burrozil",
     "Przewalskia": "przewalskia",
 }
+
+#: The bands each region is divided into, as ``rankings.php`` prints them in its Subregion
+#: column and as ``viewnation.php`` writes them into a nation's heading ("North Zebrica").
+#: That heading is why they are searchable: it is how the game phrases a place, so it is how
+#: people ask about one.
+SUBREGIONS: Tuple[str, ...] = ("North", "Central", "South")
 
 #: The other modes: one number, top twenty, not a census.
 BOARD_MODES: Dict[str, str] = {
@@ -89,6 +95,33 @@ def mode_for_region(name: str) -> Optional[str]:
     hits = [slug for region, slug in REGION_MODES.items()
             if region.casefold().startswith(wanted) or slug.startswith(wanted)]
     return hits[0] if len(hits) == 1 else None
+
+
+def split_place(term: str) -> Optional[Tuple[str, str]]:
+    """``"Central Zebrica"`` -> ``("Central", "Zebrica")``. None when it is not a place.
+
+    Also takes the region first (``"Zebrica Central"``) and a bare band (``"Central"`` ->
+    every Central nation, in all four regions). Only ever fires when the *whole* term is a
+    place: "North Star" leaves "Star", which is not a region, so it falls through and is
+    searched as a name -- which is what somebody asking about a nation called North Star
+    meant.
+    """
+    words = str(term or "").split()
+    if not words:
+        return None
+
+    for index, word in enumerate(words):
+        band = next((s for s in SUBREGIONS if s.casefold() == word.casefold()), None)
+        if band is None:
+            continue
+        rest = " ".join(words[:index] + words[index + 1:]).strip()
+        if not rest:
+            return (band, "")
+        region = region_for_mode(mode_for_region(rest) or "")
+        if region:
+            return (band, region)
+        return None
+    return None
 
 
 def _now() -> str:
@@ -191,6 +224,14 @@ class RosterStore:
             rows = [dict(entry) for value in self._regions.values()
                     for entry in value.get("nations", [])]
         return sorted(rows, key=lambda e: str(e.get("name", "")).casefold())
+
+    def in_place(self, subregion: str = "", region: str = "") -> List[Dict[str, Any]]:
+        """Nations in one band, optionally of one region: the "Central Zebrica" question."""
+        band = str(subregion or "").casefold()
+        rows = self.in_region(region) if region else self.nations
+        if not band:
+            return rows
+        return [e for e in rows if str(e.get("subregion", "")).casefold() == band]
 
     def in_region(self, region: str) -> List[Dict[str, Any]]:
         with self._lock:

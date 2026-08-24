@@ -537,13 +537,33 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
                 lines.append(f"  ...and {len(rows) - _MAX_LIST} more")
             return "\n".join(lines)
 
+        # "Central Zebrica" is how the game itself writes a place -- it is the heading on
+        # viewnation.php -- so it is what people ask for. Checked before the name search,
+        # because a place is never a nation name; split_place refuses anything that is not
+        # wholly one, so "North Star" still reaches the search below.
+        place = clop_roster.split_place(wanted) if wanted else None
+        if place is not None:
+            band, region = place
+            rows = roster.in_place(band, region)
+            where = f"{band} {region}".strip() if region else f"{band}, every region"
+            if not rows:
+                return f"No nations on file in {where}."
+            lines = [f"{where}, {len(rows)} nation(s){_roster_age(roster)}:"]
+            lines += [_roster_line(entry, with_region=bool(not region))
+                      for entry in rows[:_MAX_LIST]]
+            if len(rows) > _MAX_LIST:
+                lines.append(f"  ...and {len(rows) - _MAX_LIST} more")
+            return "\n".join(lines)
+
         if wanted:
             hits = roster.find(wanted)
             if not hits:
                 return (
                     f"No nation or player called {wanted!r} in any region. The roster has "
-                    f"{len(roster.nations)} nation(s){_roster_age(roster)}; ask for a region "
-                    f"({', '.join(clop_roster.REGION_MODES)}) to see them."
+                    f"{len(roster.nations)} nation(s){_roster_age(roster)}. Ask for a region "
+                    f"({', '.join(clop_roster.REGION_MODES)}), a part of one "
+                    f"({'/'.join(clop_roster.SUBREGIONS)} + a region), or [LOOKUP:nations] "
+                    f"for everybody."
                 )
             head = (f"{len(hits)} match(es) for {wanted!r}:" if len(hits) > 1
                     else f"One match for {wanted!r}:")
@@ -836,9 +856,10 @@ LOOKUPS: Tuple[Lookup, ...] = (
            "who is bidding on what, at what price", live=True, live_name="get_market"),
     Lookup("thread", ("4chan", "posts"), None, ("since_post?",),
            "the 4CLOP thread on /mlp/", live=True, live_name="read_thread"),
-    Lookup("nations", ("roster", "census"), None, ("name_or_region?",),
+    Lookup("nations", ("roster", "census"), None, ("name_or_place?",),
            "who exists at all: every nation in the game with its id, owner and region. "
-           "Give a name, a player, or one of Saddle Arabia/Zebrica/Burrozil/Przewalskia",
+           "Give a nation, a player, a region (Saddle Arabia/Zebrica/Burrozil/Przewalskia) "
+           "or a part of one (North/Central/South Zebrica)",
            live=True, live_name="get_roster"),
     Lookup("nation", ("player", "enemy"), None, ("id_or_name",),
            "another nation: buildings, garrison, GDP and net production per tick",
