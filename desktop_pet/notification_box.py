@@ -17,7 +17,9 @@ use, with four differences that matter:
 Two buttons, because two things are worth doing with an alert you are looking at: mark it read,
 or say you never want this kind again. The second one writes to a ``NotifyFilter`` -- the
 alternative was finding ``market.goods`` in the monitor's ``settings.json``, which is not a
-thing anyone does at the moment they are annoyed by a notification.
+thing anyone does at the moment they are annoyed by a notification. Clicking anywhere else on
+an alert that carries a link opens it and clears it in one go: following the link is reading
+it, and leaving the panel behind would mean tidying up after every link you follow.
 
 Notifications arrive in bursts -- the monitor raises up to six in one poll -- so this shows one
 at a time with a count of what is behind it, rather than stacking six always-on-top windows in
@@ -460,10 +462,17 @@ class NotificationBox(QWidget):
                 import webbrowser
 
                 # Safe to call directly: mouse events run on the Qt main thread.
-                webbrowser.open(url)
+                opened = webbrowser.open(url)
             except Exception as exc:
                 logger.warning("Could not open %s: %s", url, exc)
+                opened = False
             self.opened.emit(payload)
+            # Reading it in the browser *is* reading it, so clicking through clears it as
+            # surely as "Mark as read" does -- otherwise every followed link leaves a panel
+            # to tidy up afterwards. Not when the browser never opened, though: the box is
+            # then the only place that link still exists.
+            if opened:
+                self.dismiss_current()
 
     # ── Painting ──────────────────────────────────────────────────────────
 
