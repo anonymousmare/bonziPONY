@@ -1050,7 +1050,13 @@ class Pipeline:
                 logger.info("Warcalc: %s", body)
                 from core.clop_tools import run_warcalc_tag
 
-                results.append(f"[warcalc]\n{run_warcalc_tag(body)}")
+                # Only from here, never from the agent loop: this opens a browser window,
+                # and a window appearing over a full-screen game because she was thinking
+                # to herself is not a feature. A conversation means the user is present
+                # and asked.
+                show_page = bool(getattr(getattr(self.config, "clop", None),
+                                         "warcalc_page", True))
+                results.append(f"[warcalc]\n{run_warcalc_tag(body, show_page=show_page)}")
 
             hist = getattr(self.llm, "_history", None)
             if hist is not None and len(hist) >= 2:

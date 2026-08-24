@@ -558,6 +558,19 @@ Verify it with `python clop_monitor/sheets.py`, which resolves the name, checks 
 and reads one cell without writing anything. Run one writer, not two: if you would rather keep
 the sync in your own `clop_monitor.py` run, set `clop.sheet_sync: false`.
 
+**The warcalc page.** `[WARCALC:...]` gives a spoken answer to "can I take them", which is the
+wrong shape for the question that always comes next — what if I bring twenty more, what if
+they attack me instead, what if I re-equip the pegasi. So when she runs a battle *while you are
+talking to her*, she also opens `tools/warcalc.html` with that battle already filled in: the
+same simulation ported to JavaScript, plus unit sprites, hire and upkeep costs, and every
+number editable. Change what you like and hit Resolve again.
+
+She never opens it on her own initiative — only from a conversation, because a window
+appearing over a full-screen game because she was thinking to herself is not a feature. The
+battle travels in the URL fragment, which is never sent anywhere; over `file://` there is
+nothing to send it to. Right-click → 4CLOP has a switch for it and an "Open The Warcalc Page
+Now" for when you just want to play with it. `clop.warcalc_page` in config.yaml.
+
 **One caveat, by design.** Reading the alliance chat marks it read *for your account* — you
 will see it as read in your own browser too. That is the game's behaviour on the GET, not
 something this adds. It is the one lookup that can be switched off:

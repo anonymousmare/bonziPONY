@@ -1155,6 +1155,21 @@ class ContextMenuBuilder:
             group.addAction(act)
             sub.addAction(act)
 
+    def _open_warcalc_page(self, parent) -> None:
+        """Open the battle simulator empty, for somebody who just wants to play with it."""
+        import webbrowser
+
+        from PyQt5.QtWidgets import QMessageBox
+
+        from core import warcalc_page
+
+        page = warcalc_page.DEFAULT_PAGE
+        if not page.is_file():
+            QMessageBox.warning(parent, "Warcalc",
+                                f"The warcalc page is missing.\n\nExpected it at:\n{page}")
+            return
+        webbrowser.open(page.resolve().as_uri())
+
     # ── Config setters ────────────────────────────────────────────────────
 
     def _set(self, section: str, key: str, value) -> None:
@@ -1758,6 +1773,14 @@ class ContextMenuBuilder:
             ("Important only", "high"),
             ("Always", "always"),
         ], cfg.speak_notifications, lambda v: self._set("clop", "speak_notifications", v))
+
+        self._add_toggle(
+            clop_menu, "Open The Warcalc Page",
+            getattr(cfg, "warcalc_page", True),
+            lambda c: self._set("clop", "warcalc_page", c),
+        )
+        clop_menu.addAction("Open The Warcalc Page Now").triggered.connect(
+            lambda: self._open_warcalc_page(parent))
 
         self._radio_submenu(clop_menu, "Strategy Thoughts", [
             ("Off", "off"),

@@ -693,8 +693,14 @@ def make_live_tools(bridge) -> Dict[str, Callable[..., str]]:
 # ── Warcalc tools ─────────────────────────────────────────────────────────────
 
 def run_warcalc(attackers: List[Dict], defenders: List[Dict],
-                defender_bonus: bool = True) -> str:
-    """Simulate a battle and report the casualties."""
+                defender_bonus: bool = True, show_page: bool = False) -> str:
+    """Simulate a battle and report the casualties.
+
+    ``show_page`` also opens ``tools/warcalc.html`` with this battle already filled in. The
+    spoken answer covers "can I take them"; the page covers everything the user asks next --
+    what if I bring twenty more, what if they attack me instead -- without another round trip
+    through her.
+    """
     from core import warcalc
 
     result = warcalc.simulate(attackers, defenders, defender_bonus)
@@ -713,6 +719,25 @@ def run_warcalc(attackers: List[Dict], defenders: List[Dict],
             )
     if result["stalls"]:
         lines.append(f"  Stalemates (zero damage): {len(result['stalls'])}")
+
+    if show_page:
+        from core import warcalc_page
+
+        url, notes = warcalc_page.open_battle(
+            attackers, defenders, defender_bonus,
+            title=f"{result['outcome']}, as she ran it",
+        )
+        if url:
+            # Said plainly because she has to be able to mention it: an interactive page
+            # opening silently behind the game window helps nobody.
+            lines.append(
+                "  The warcalc page is now open on this battle, so the user can change the "
+                "numbers themselves. Tell them it is up."
+            )
+        else:
+            logger.info("Warcalc page not opened: %s", "; ".join(notes) or "no reason given")
+        for note in notes:
+            lines.append(f"  (page: {note})")
     return "\n".join(lines)
 
 
@@ -1058,7 +1083,7 @@ def parse_force_list(text: str) -> List[Dict[str, Any]]:
     return forces
 
 
-def run_warcalc_tag(body: str) -> str:
+def run_warcalc_tag(body: str, show_page: bool = False) -> str:
     """Run a `[WARCALC:... vs ...]` tag body and report the result.
 
     A parse failure comes back as the expected format rather than as an exception, so
@@ -1080,7 +1105,7 @@ def run_warcalc_tag(body: str) -> str:
     # defender is normally on their own soil -- that is what "defending" means here.
     bonus = "nobonus" not in text.casefold() and "no bonus" not in text.casefold()
     try:
-        return run_warcalc(attackers, defenders, bonus)
+        return run_warcalc(attackers, defenders, bonus, show_page=show_page)
     except Exception as exc:
         logger.exception("Warcalc failed")
         return f"error: {exc}"

@@ -162,6 +162,10 @@ clop:
                                # tab (put it in clop_monitor/.env beside the login). Set this
                                # false if you would rather run clop_monitor.py yourself: two
                                # processes writing one tab is the only real hazard here.
+  warcalc_page: true           # when she runs a battle simulation while you are talking to
+                               # her, open tools/warcalc.html with that battle already filled
+                               # in — same maths, plus sprites, costs and every number editable.
+                               # She never opens it on her own initiative, only when asked.
   thread_check_hours: 1.0      # how often she reads the 4chan thread (0 to disable)
   thread_auto_find: true       # find the current /mlp/ general from the board catalog.
                                # Threads archive after a day or two, so leave this on and

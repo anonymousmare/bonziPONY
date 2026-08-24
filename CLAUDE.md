@@ -82,6 +82,7 @@ main.py (bootstrap + wiring)
 | `clop_dossier.py` | What she has learned about other nations, persisted and stamped | `DossierStore`, `store()` |
 | `clop_roster.py` | Who exists at all: every nation, from the four regional rankings pages | `RosterStore`, `REGION_MODES` |
 | `warcalc.py` | Battle simulation, ported from the game's own combat loop | `simulate()`, `force_cost()` |
+| `warcalc_page.py` | Hands a battle to `tools/warcalc.html` in the URL fragment | `open_battle()`, `build_payload()` |
 | `routines.py` | Persistent scheduled actions (wake/sleep/daily/weekly/interval) | `RoutineManager` |
 | `event_timeline.py` | Shared event log bridging Pipeline and AgentLoop | `EventTimeline` |
 | `screen_monitor.py` | Win32 window title polling (free, no API calls) | `ScreenMonitor` |
@@ -151,6 +152,7 @@ main.py (bootstrap + wiring)
 | `memory/` | `user_profile.txt`, `user_events.txt`, `sessions.txt` |
 | `diary/` | Per-character journal files |
 | `scripts/` | `list_audio_devices.py`, `test_pipeline.py` |
+| `tools/warcalc.html` | The battle simulator as a page: same maths in JS, plus sprites, costs and editable numbers. Vendored, not generated |
 
 ## Key Data Flow
 
@@ -218,6 +220,18 @@ ClopBridge poll thread (60s)
       → rankings.php?mode=saddle|zebrica|burrozil|przewalskia   (public, per region)
         → clop_pages.parse_rankings(html) → RosterStore.record(region, rows)
     → group by region, or filter by region, or search name then owner
+```
+
+### Handing a battle to the page
+```
+[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]   (during a conversation)
+  → run_warcalc_tag(body, show_page=True) → run_warcalc(...)
+    → warcalc.simulate(...)                  # the spoken answer
+    → warcalc_page.open_battle(...)
+      → build_payload()   "Grid Squares" → "GridSquares", alicorn attackers dropped
+      → fragment()        base64url JSON, never sent anywhere
+      → webbrowser.open("file://.../tools/warcalc.html#w=...")
+        → preloadFromHash() → setSide() ×2 → btnRun.click()
 ```
 
 ### Hourly thread check
@@ -519,15 +533,32 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     exactly as often. Keep the halves split on that axis; `tests/test_idle_prompts.py` fails
     if a caretaking line lands in the flavour list.
 
-44. **The notification box holds still while the pointer is over it.** It re-places itself
+44. **An equipment name the warcalc page does not know fails silently.** `makeRow` leaves
+    the select empty and the unit ends up with scrounged gear — no error, just a different
+    battle from the one she read out. `warcalc_page` maps names itself (the page spells
+    "Grid Squares" as `GridSquares`; that is the whole difference), reports anything it could
+    not map so she can say so, and `tests/test_warcalc_page.py` checks its tables against the
+    page's own and against every name in `gamedata.json`.
+
+45. **The warcalc page opens from a conversation only.** `Pipeline._resolve_lookups` passes
+    `show_page`; `AgentLoop._resolve_lookups` never does. A browser window appearing over a
+    full-screen game because she was thinking to herself is not a feature.
+
+46. **The battle rides in the URL fragment, on the one canonical file.** A fragment is never
+    sent to a server, and `file://` has no server anyway — nothing about the user's game
+    leaves the machine. Writing a per-battle copy of the page instead would also work, and
+    would cost the user their saved armies: `localStorage` is per file, so their presets live
+    with `tools/warcalc.html` itself.
+
+47. **The notification box holds still while the pointer is over it.** It re-places itself
     30 times a second, so without that guard a speech bubble appearing while you are reaching
     for "Mark as read" would slide the button out from under the click.
 
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 186 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement,
-idle prompts
+python -m unittest discover -s tests    # 204 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement,
+idle prompts, warcalc handover
 cd clop_monitor && python -m unittest   # 623 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
