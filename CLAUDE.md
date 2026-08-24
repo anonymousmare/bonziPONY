@@ -80,6 +80,7 @@ main.py (bootstrap + wiring)
 | `clop_thread.py` | The hourly thread read and the cheap gate in front of it | `ThreadState`, `decide()` |
 | `clop_catalog.py` | Finds the current /mlp/ general, because threads archive daily | `find_thread()`, `ThreadResolver` |
 | `clop_dossier.py` | What she has learned about other nations, persisted and stamped | `DossierStore`, `store()` |
+| `clop_roster.py` | Who exists at all: every nation, from the four regional rankings pages | `RosterStore`, `REGION_MODES` |
 | `warcalc.py` | Battle simulation, ported from the game's own combat loop | `simulate()`, `force_cost()` |
 | `routines.py` | Persistent scheduled actions (wake/sleep/daily/weekly/interval) | `RoutineManager` |
 | `event_timeline.py` | Shared event log bridging Pipeline and AgentLoop | `EventTimeline` |
@@ -143,7 +144,7 @@ main.py (bootstrap + wiring)
 | `vision/camera.py` | Webcam capture via OpenCV |
 | `vision/watch_mode.py` | CLIP + OCR continuous screen understanding (zero API cost) |
 | `acknowledgement/player.py` | Plays per-character beep/chime on wake word detection |
-| `clop_monitor/clop_pages.py` | Parsers for `viewnation.php`, `viewalliance.php`, `messages.php`, `news.php` |
+| `clop_monitor/clop_pages.py` | Parsers for `viewnation.php`, `viewalliance.php`, `messages.php`, `news.php`, `rankings.php` |
 | `clop_monitor/fixtures/` | Page HTML rendered by the game's own PHP templates, plus the generators |
 | `presets/` | Character personality .txt files (system prompts). `_template.txt` for auto-generation |
 | `Ponies/` | 311+ Desktop Ponies sprite packs (pony.ini + GIFs) |
@@ -196,12 +197,25 @@ ClopBridge poll thread (60s)
 
 ### Reading another nation
 ```
-[LOOKUP:nation:47]
-  → ToolRegistry.dispatch → get_nation("47")
+[LOOKUP:nation:47]  or  [LOOKUP:nation:Silverspire]
+  → ToolRegistry.dispatch → get_nation(target)
+    → a number?      → that id
+    → dossier.find_by_name  → an id she has already read
+    → roster.find(name)     → an id from the census, refreshing it if stale
     → dossier fresh?  → render the stored reading, no fetch
     → otherwise ClopBridge.nation(47) → clop_pages.parse_nation(html)
       → dossier.record_nation(nation)
         → Force.as_warcalc() feeds core.warcalc.simulate directly
+```
+
+### Who exists at all
+```
+[LOOKUP:nations]  /  [LOOKUP:nations:burrozil]  /  [LOOKUP:nations:Cottonmaw]
+  → ToolRegistry.dispatch → get_roster(term)
+    → roster stale?  → ClopBridge.refresh_roster()
+      → rankings.php?mode=saddle|zebrica|burrozil|przewalskia   (public, per region)
+        → clop_pages.parse_rankings(html) → RosterStore.record(region, rows)
+    → group by region, or filter by region, or search name then owner
 ```
 
 ### Hourly thread check
@@ -234,6 +248,7 @@ The LLM embeds structured tags in its natural language response. `response_parse
 | `[MOVETO:region]` | Move pony to screen area | `[MOVETO:top_left]` |
 | `[RULE:description]` | Create standing behavioral rule | `[RULE:quit porn]` |
 | `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:pollution:Oil Fracker:14]` |
+| `[LOOKUP:nations:x]` | Who exists: the whole roster, a region, or a search | `[LOOKUP:nations]`, `[LOOKUP:nations:Silverspire]` |
 | `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
 
 Anything else in brackets and upper case is a command she invented. It is stripped rather
@@ -242,10 +257,11 @@ no search, and `[BROWSE:...]` was reaching TTS.
 
 The lookups themselves are listed by `ToolRegistry.prompt_block()`, generated from `LOOKUPS`
 so the prompt can never offer one that is switched off or whose bridge is down. Live ones
-(`stockpiles`, `status`, `market`, `thread`, `nation`, `alliance`, `messages`,
-`alliance_messages`, `news`) need the bridge connected; `dossier` reads a file, so it still
-answers when the game is unreachable — which is when knowing what she already learned is
-most useful.
+(`stockpiles`, `status`, `market`, `thread`, `nations`, `nation`, `alliance`, `rankings`,
+`messages`, `alliance_messages`, `news`) need the bridge connected; `dossier` reads a file, so
+it still answers when the game is unreachable — which is when knowing what she already learned
+is most useful. `nations` is live because reading a nation is: its file (`clop_roster.json`) is
+what survives a restart and what answers when a refresh fetch fails, not a second offline row.
 
 ## Directive System
 
@@ -372,7 +388,8 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
 23. **The page fixtures are PHP-generated, not hand-written.** `clop_monitor/fixtures/*.html`
     come from the game's own templates via `gen_nation.php` / `gen_rest.php`; see the
     README there for how to regenerate them. A hand-written fixture only proves the parser
-    agrees with whoever wrote the fixture.
+    agrees with whoever wrote the fixture. The `rankings_*.html` six are the exception and
+    are better still: that page is public, so they are `curl` captures of the live server.
 
 24. **Never derive another nation's economy from its building counts.** `viewnation.php`
     renders a Generated / Used / Net table that the game computes itself, government upkeep
@@ -448,15 +465,34 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     `CompositionMode_Source` for that one fill, which replaces those pixels instead of
     compositing onto them.
 
-36. **The notification box holds still while the pointer is over it.** It re-places itself
+36. **`rankings.php` never says no.** An unknown `mode` does not error: it falls through to
+    the regional branch and renders "These are the  nations." — the roster headings above no
+    rows — which is byte-for-byte what an empty board looks like. So `get_rankings` checks the
+    mode against `clop_roster.modes()` *before* fetching. Without that, a typo comes back as a
+    confident "nobody is on that board".
+
+37. **The roster replaces a region; it does not merge it.** A nation that has dropped off
+    `rankings.php?mode=<region>` has been conquered or has died, and merging would leave her
+    briefing the user about somebody who no longer exists. The flip side: the four fetches are
+    separate and stamped separately, so one failed page keeps its previous reading instead of
+    emptying it, and `is_stale()` with no region stays True until all four have been read at
+    least once.
+
+38. **The roster is not the dossier.** The dossier is what she has *read* — buildings,
+    garrison, economy, capped at 60 nations and gone stale in hours. The roster is only who is
+    out there to read: id, name, owner, region, government. Keeping them apart is what lets
+    the roster be a complete census that costs four public page fetches a day, and stops a
+    roster sweep from evicting real readings.
+
+39. **The notification box holds still while the pointer is over it.** It re-places itself
     30 times a second, so without that guard a speech bubble appearing while you are reaching
     for "Mark as read" would slide the button out from under the click.
 
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 150 tests: lorebook, lookups, dossier, settings, thread, tags, filters, placement
-cd clop_monitor && python -m unittest   # 615 tests: the monitor's own suite
+python -m unittest discover -s tests    # 172 tests: lorebook, lookups, dossier, roster, settings, thread, tags, filters, placement
+cd clop_monitor && python -m unittest   # 623 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
 `tests/test_lookup_roundtrip.py` drives the lookup path with a hand-written stub provider
@@ -465,6 +501,9 @@ and asserts `anthropic` was never imported — that is the claim it exists to pr
 callable and every tool in `make_live_tools` must have a row. It exists because the same bug
 happened twice — tools written, registered in one place, never connected to what calls them.
 Its `RenderingTests` class covers the other half: reachable and correct are two claims.
+`tests/test_clop_roster.py` drives `[LOOKUP:nations]` and `[LOOKUP:nation:<name>]` against the
+four captured regional pages with a stub bridge, because "she can now be asked about a nation
+she has never read" is the claim the roster exists to make and the store alone does not show it.
 `tests/test_stacking.py` asserts on coordinates rather than screenshots, which is the whole
 reason `desktop_pet/stacking.py` has no Qt in it: "did the alert land on top of her speech
 bubble" is a question with an arithmetic answer.
@@ -477,6 +516,7 @@ For integration testing, use `scripts/test_pipeline.py` which tests STT → LLM 
 | `directives.json` | AgentLoop | Yes | `{"directives": [...], "enforcement": null, "standing_rules": [...]}` |
 | `routines.json` | RoutineManager | Yes | `[{"id": ..., "schedule": ..., "goal": ..., ...}]` |
 | `clop_dossier.json` | DossierStore | Yes | `{"nations": {...}, "alliances": {...}, "seen": {...}}` |
+| `clop_roster.json` | RosterStore | Yes | `{"regions": {"Burrozil": {"read_at": ..., "nations": [...]}}}` |
 | `clop_unread.json` | UnreadStore | Yes | `{"unread": [...], "seen_total": {...}}` |
 | `notify_filters.json` | NotifyFilter (box + settings menu) | Yes | `{"categories": {...}, "subjects": [...]}` |
 | `wake_state.json` | RoutineManager | Yes | `{"wake_time": ISO, "last_active": ISO}` |

@@ -160,6 +160,15 @@ class ClopBridge:
             max_age_hours=float(getattr(clop_config, "dossier_max_age_hours", 6.0))
         )
 
+        from core import clop_roster
+
+        #: Who exists at all: every nation in the game, from the four regional rankings
+        #: pages. Kept apart from the dossier because it is a different claim -- the dossier
+        #: is what she has read, this is only what is out there to read.
+        self.roster = clop_roster.store(
+            max_age_hours=float(getattr(clop_config, "roster_max_age_hours", 12.0))
+        )
+
         from core.clop_catalog import ThreadResolver
 
         #: Which /mlp/ thread is the game's general right now. Shared by the hourly check
@@ -411,6 +420,49 @@ class ClopBridge:
         with self.lock:
             html = self.client._open(f"viewalliance.php?alliance_id={int(alliance_id)}")
         return clop_pages.parse_alliance(html, alliance_id=int(alliance_id))
+
+    def rankings(self, mode: str) -> List[Any]:
+        """One rankings.php board, parsed.
+
+        Public and read-only: the page renders for a logged-out browser and changes no state,
+        so this is the cheapest page in the game to ask for. It still goes through the
+        authenticated session because that is the one client and the one lock.
+        """
+        self._require()
+        import urllib.parse
+
+        import clop_pages
+
+        with self.lock:
+            html = self.client._open(
+                "rankings.php?mode=" + urllib.parse.quote(str(mode).strip())
+            )
+        return clop_pages.parse_rankings(html)
+
+    def refresh_roster(self, force: bool = False):
+        """Re-read the four regional rosters into ``self.roster``. Returns the roster.
+
+        Fetch failures are per region and are not fatal: three good regions and one that
+        timed out is a better roster than none, and the region that failed keeps whatever
+        reading it already had rather than being emptied.
+        """
+        from core import clop_roster
+
+        for region, mode in clop_roster.REGION_MODES.items():
+            if not force and not self.roster.is_stale(region):
+                continue
+            try:
+                rows = self.rankings(mode)
+            except Exception as exc:
+                logger.warning("Could not read the %s roster: %s", region, exc)
+                continue
+            if not rows:
+                # An empty region is possible but is far more likely to be the game
+                # answering oddly, and recording it would delete a good roster.
+                logger.warning("The %s roster came back empty; keeping what we had", region)
+                continue
+            self.roster.record(region, rows)
+        return self.roster
 
     def messages(self, box: str = "inbox"):
         """The user's inbox.

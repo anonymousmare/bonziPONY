@@ -494,6 +494,7 @@ Spoken text goes here. [DIRECTIVE:do homework:6] [CONVO:CONTINUE]
 | `[DESKTOP:BROWSE:url]` | Open URL | `[DESKTOP:BROWSE:youtube.com]` |
 | `[DESKTOP:SCROLL:n]` | Scroll | `[DESKTOP:SCROLL:-3]` (down) |
 | `[LOOKUP:query]` | Ask for real game numbers | `[LOOKUP:Coffee Farm]`, `[LOOKUP:nation:47]` |
+| `[LOOKUP:nations:x]` | Who exists at all | `[LOOKUP:nations]`, `[LOOKUP:nations:Silverspire]` |
 | `[WARCALC:a vs b]` | Simulate a battle | `[WARCALC:40 Unicorns/Grid Squares/Shining/12 vs 60 Pegasi]` |
 
 ### Looking things up
@@ -512,7 +513,9 @@ offers one that is switched off or whose game session is down.
 | `building`, `buildings`, `recipe` | Costs, per-tick production and consumption, pollution |
 | `good`, `pollution`, `rules`, `nationtypes` | Game data straight from the SQL export |
 | `stockpiles`, `status`, `market` | Your own nation, live |
-| `nation:47`, `alliance:12` | Someone else's buildings, garrison, GDP and net production |
+| `nations`, `nations:burrozil`, `nations:Cottonmaw` | Who exists at all: every nation with its id, owner and region |
+| `nation:47`, `nation:Silverspire`, `alliance:12` | Someone else's buildings, garrison, GDP and net production |
+| `rankings:gdp`, `rankings:longevity` | The scoreboards |
 | `messages`, `alliance_messages`, `news` | Your inbox, the alliance chat, the news feed |
 | `thread` | The 4CLOP thread on /mlp/ |
 | `dossier` | Which nations she has read, and how fresh each reading is |
@@ -527,6 +530,16 @@ puts its real numbers in front of her before she answers.
 `clop_dossier.json` with a timestamp and reused until they go stale
 (`clop.dossier_max_age_hours`), and a nation that shows up bidding in the market gets noted
 for a look without spending a page fetch on it.
+
+**Who is out there.** The dossier only ever knew the nations she had actually read, so asking
+about anyone else came back as "no nation called that on file" — which was never the question.
+`rankings.php` has four regional modes, and between them they list every living nation in the
+game with its id, owner, subregion, government and economy. They are public: no login, nothing
+marked read. She reads all four every twelve hours (`clop.roster_max_age_hours`) into
+`clop_roster.json`, which is what makes `[LOOKUP:nations]` a census and lets
+`[LOOKUP:nation:Silverspire]` work for someone she has never looked at. Names are matched
+exactly first, then by prefix, then by substring, then against player handles, so an exact name
+is never buried under the nations that merely contain it.
 
 **One caveat, by design.** Reading the alliance chat marks it read *for your account* — you
 will see it as read in your own browser too. That is the game's behaviour on the GET, not

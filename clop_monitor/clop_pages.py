@@ -491,3 +491,120 @@ def parse_news(html: str) -> List[NewsItem]:
             continue
         out.append(NewsItem(message=row[0], posted=row[1]))
     return out
+
+
+# ── rankings.php ──────────────────────────────────────────────────────────────
+
+
+#: Headings that carry something other than the ranked value. Whatever column is left over
+#: is the value the board is sorted by, which is how one parser reads all seven modes.
+_RANKING_KNOWN = ("", "nation", "user", "subregion", "government", "economy", "creation date")
+
+
+@dataclass(frozen=True)
+class RankedNation:
+    """One row of rankings.php.
+
+    The regional modes list every nation in a region -- name, owner, subregion, government
+    and economy -- which together make the game's only public census. The scoreboard modes
+    (gdp, longevity, statues) list the top twenty by one number, which lands in ``value``
+    under the heading the page gave it.
+    """
+
+    nation_id: Optional[int]
+    name: str
+    region: str = ""
+    user: str = ""
+    user_id: Optional[int] = None
+    subregion: str = ""
+    government: str = ""
+    economy: str = ""
+    #: Position on the page, from 1. Meaningful on a scoreboard; arbitrary on a roster.
+    rank: int = 0
+    #: The ranked number, when the mode has one.
+    value: Optional[int] = None
+    #: What the page called that number, e.g. "GDP Last Turn".
+    value_label: str = ""
+    created: str = ""
+
+
+def _linked_id(hrefs: List[str], key: str) -> Optional[int]:
+    for href in hrefs:
+        if f"{key}=" not in href:
+            continue
+        match = _ID_IN_HREF.search(href)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def parse_rankings(html: str) -> List[RankedNation]:
+    """Read a rankings.php page, whichever mode it was asked for.
+
+    The columns differ per mode, so they are read by heading rather than by position: every
+    mode renders a Nation column, and the one heading that is not a known field is the value
+    being ranked.
+
+    An empty list is not an error. Two different things produce one: a board nobody is on
+    yet (statues, early in a round) and a mode the game does not know -- an unrecognised
+    mode falls through to the regional branch and renders "These are the  nations." with the
+    roster headings above no rows. The page gives the parser nothing to tell those apart, so
+    the caller validates the mode instead of guessing here. ``PageParseError`` is kept for a
+    page that is not a rankings page at all.
+    """
+    rows = table_rows_with_links(html)
+    header_at = None
+    for index, (cells, _hrefs) in enumerate(rows):
+        if any(cell.strip().casefold() == "nation" for cell in cells):
+            header_at = index
+            break
+    if header_at is None:
+        raise PageParseError(
+            "no Nation column; every rankings.php mode renders one, so this is most "
+            "likely a mode the game does not know"
+        )
+
+    headings_row = [cell.strip() for cell in rows[header_at][0]]
+    lowered = [cell.casefold() for cell in headings_row]
+
+    def column(name: str) -> int:
+        return lowered.index(name) if name in lowered else -1
+
+    nation_at = column("nation")
+    user_at = column("user")
+    subregion_at = column("subregion")
+    government_at = column("government")
+    economy_at = column("economy")
+    created_at = column("creation date")
+    value_at = next((i for i, head in enumerate(lowered) if head not in _RANKING_KNOWN), -1)
+    value_label = headings_row[value_at] if value_at >= 0 else ""
+
+    def cell(cells: List[str], at: int) -> str:
+        return cells[at] if 0 <= at < len(cells) else ""
+
+    out: List[RankedNation] = []
+    for cells, hrefs in rows[header_at + 1:]:
+        if nation_at >= len(cells):
+            continue
+        name, region = _split_paren(cells[nation_at])
+        if not name:
+            continue
+        raw_value = cell(cells, value_at)
+        out.append(RankedNation(
+            nation_id=_linked_id(hrefs[nation_at] if nation_at < len(hrefs) else [],
+                                 "nation_id"),
+            name=name,
+            region=region,
+            user=cell(cells, user_at),
+            user_id=_linked_id(hrefs[user_at] if 0 <= user_at < len(hrefs) else [],
+                               "user_id"),
+            # "South " -- the game leaves the trailing space where the icon would go.
+            subregion=cell(cells, subregion_at).strip(),
+            government=cell(cells, government_at),
+            economy=cell(cells, economy_at),
+            rank=len(out) + 1,
+            value=_int(raw_value) if _NUMBER.search(raw_value) else None,
+            value_label=value_label,
+            created=cell(cells, created_at),
+        ))
+    return out

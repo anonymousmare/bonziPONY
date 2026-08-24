@@ -1,0 +1,121 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+    <link rel="icon" type="image/png" href="images/favicon.png" />
+        <link href="css/slate.min.css" rel="stylesheet" media="Screen">
+    <script src="js/jquery-1.10.2.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/masonry.pkgd.min.js"></script>
+    <style type="text/css">
+        
+ul.nav li.dropdown:hover > ul.dropdown-menu {
+display: block;
+}
+span.spoiler {
+color: #000000;
+background: #000000;
+}
+
+span.spoiler:hover {
+color: #FFFFFF;
+}
+        
+            .report-showbutton{display: none;}
+    .report-details{display: block;}
+        #content{
+            min-width: 500px;
+            max-width: 95%;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 40px
+        }
+        #content-outer{
+            
+        }
+        .text-width-micro{
+            width: 64px;
+        }
+    </style>
+
+    <script type="text/javascript">
+      function doCountdownTick(countdown_seconds){
+        if(countdown_seconds == 0)
+          countdown_seconds = 60 * 60 * 2;
+       
+        var hours = Math.floor(countdown_seconds / 60 / 60);
+        var mins = Math.floor(countdown_seconds / 60) - (hours * 60);
+        var secs = countdown_seconds % 60;
+       
+        var countdownstring =
+          hours + ":" + 
+          ("0" + mins).slice(-2) + ":" + 
+          ("0" + secs).slice(-2);
+        document.getElementById("countdown").innerHTML = countdownstring;
+       
+        countdown_seconds--;
+        setTimeout("doCountdownTick(" + countdown_seconds + ")", 1000);
+      }
+      window.onload = function(){
+        doCountdownTick(4894);
+      }
+    </script>
+    
+    <title>Rankings - &gt;CLOP, the game of geoponitics</title>
+</head>
+<body alink="#00ae0e" link="#00ae0e" vlink="#1f8001">
+<meta content="text/html; charset=ISO-8859-1" http-equiv="content-type">
+<div id="content-outer"><center><img src="images/11.png" height="250"/></center><center><span id="topmessage"><a href="topmessage.php">We're so BACK!</a></span></center>
+<center>&gt;4CLOP Community: <a href="https://boards.4channel.org/mlp/catalog#s=4clop" target="_new_win">/MLP/ Thread</a> | <a href="https://discord.gg/92SMXt6yT" target="_new_win">Discord server.</a> | <a href="http://irc.penk.pink" target="_new_win">IRC - "/msg sneed" if you need assistance</a> &nbsp;&nbsp;&nbsp;&nbsp;</center>  <nav class="navbar navbar-default" role="navigation">
+    <div class="navbar-header">
+    <a class="navbar-brand" href="index.php">&gt;CLOP</a>
+    </div>
+    <ul class="nav navbar-nav navbar-right pull-right">
+      <li><a>Server time: 2026-08-24 04:38:26</a></li>
+      <li><a>Next turn: <span class="text-danger" id="countdown"></span></a></li>
+      <li><a href="search.php">Search</a></li>
+      <li><a href="statistics.php">Stats</a></li>
+      <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">Rankings <b class="caret"></b></a>
+      <ul class="dropdown-menu">
+          <li><a href="rankings.php?mode=gdp">GDP</a></li>
+          <li><a href="rankings.php?mode=statues">Statues</a></li>
+          <li><a href="rankings.php?mode=longevity">Longevity</a></li>
+          <li><a href="empirerankings.php">Empire Size</a></li>
+          <li><a href="ascensions.php">Ascensions</a></li>
+          <li><a href="graveyard.php">Graveyard</a></li>
+      </ul>
+      </li>
+      <li><a href="news.php">News</a></li>
+      <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown"><font color="orange">Guides </font><b class="caret"></b></a>
+      <ul class="dropdown-menu">
+        <li><a href="rules.php">Rules</a></li>
+        <li><a href="https://docs.google.com/document/u/0/d/1jSinNyYJCHkoDvQgaJkD_z2g9SV5G6v9gsKI-nwmrYM/mobilebasic" target="_new_win">Recommended Guide</a></li>
+        <li><a href="https://4clop.org/images/the_chart.png" target="_new_win">Enviro Loss Chart</a></li>
+        <li><a href="guide.php">Another Guide</a></li>
+        <li><a href="warguide.php">War Guide</a></li>
+        <li><a href="https://files.catbox.moe/iqa8bn.txt">Another War Guide</a></li>
+        <li><a href="https://files.catbox.moe/akfmdc.png">Unit Comparison Table</a></li>
+        <li><a href="OSA.php">Online Safety Act compliance</a></li>
+     	</li>
+	 </ul>
+  </nav>
+  <div id="content"> 
+    <p>
+      <form name="login_top" method="post" action="login.php" role="form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" class="form-control" id="username" placeholder="Username" name="username" maxlength="25">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" class="form-control" id="password" placeholder="Password" name="password" maxlength="250">
+        </div>
+        <span><input type="submit" value="Log in" class="btn btn-success"/> <a href="newuser.php" class="btn btn-info">New User</a></span>
+      </form>
+    </p>
+    
+    <center>These are the zebrica nations.</center>
+<table class="table table-striped table-bordered">
+<tr><th style="width:25px"></th><th>Nation</th><th>User</th><th>Subregion</th><th>Government</th><th>Economy</th></tr><tr><td style="width:25px"><img src="https://i.postimg.cc/pXPPncwV/lepone.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=17">Sierra Lepone (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=17">Aryanne</td><td>North </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://u.pone.rs/oznoyznd.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=16">Vladihoofstock (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=16">curio777</td><td>Central </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://files.catbox.moe/0amb5y.jpg" height="20" width="20"></td><td><a href="viewnation.php?nation_id=12">Endless Reverie (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=12">IvyDream</td><td>South </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://u.pone.rs/gdvzgajf.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=24">Kirinheim (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=24">Lex Rudera</td><td>North </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"></td><td><a href="viewnation.php?nation_id=61">Zaam (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=59">cloponomics</td><td>Central </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://files.catbox.moe/bmxfuu.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=51">Solarium (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=50">Legion</td><td>North </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://i.imgur.com/LfLRdMh.jpeg" height="20" width="20"></td><td><a href="viewnation.php?nation_id=28">Mare Tempestus (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=28">Sharps</td><td>South </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://u.pone.rs/qqxcshmt.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=63">Hindun (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=61">Hind</td><td>South </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://www.clipartmax.com/png/middle/180-1808288_fanmade-zecora-my-little-pony-friendship.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=46">Equiopia (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=45">Diregeist</td><td>South </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"></td><td><a href="viewnation.php?nation_id=3">Lanathesis (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=3">Dark Vessel</td><td>Central </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"></td><td><a href="viewnation.php?nation_id=80">Pegasos Adonis (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=73">johnonymous</td><td>North </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"><img src="https://u.pone.rs/eootxydr.png" height="20" width="20"></td><td><a href="viewnation.php?nation_id=53">Stars and Stripes (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=52">kingofthemoon</td><td>Central </td><td>Loose Despotism</td><td>Poorly Defined</td></tr><tr><td style="width:25px"></td><td><a href="viewnation.php?nation_id=15">Tempora (<img src="images/icons/Copper.png"/>Zebrica)</a></td><td><a href="viewuser.php?user_id=15">AutistSquared</td><td>North </td><td>Loose Despotism</td><td>Poorly Defined</td></tr></table></div>
+</div>
+</body>
+</html>

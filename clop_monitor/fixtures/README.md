@@ -17,3 +17,21 @@ for f in viewnation news messages viewalliance; do
 done
 php gen_nation.php && php gen_rest.php
 ```
+
+## The exception: rankings.php
+
+The six `rankings_*.html` files — one per region (`saddle`, `zebrica`, `burrozil`,
+`przewalskia`) plus `gdp` and `longevity` — were **captured from the live server**, not
+rendered:
+
+```bash
+curl -o rankings_burrozil.html 'https://4clop.org/rankings.php?mode=burrozil'
+```
+
+That page needs no login and no database fixture — it is public, so the game itself will
+answer, and its own output is better evidence than a template fed rows somebody made up.
+Between them they cover the two shapes rankings.php has — a regional roster (Nation, User,
+Subregion, Government, Economy) and a scoreboard (Nation, the ranked value, Government,
+Economy), with longevity's extra Creation Date column sitting between the value and the
+government — and the four regional pages together are a whole census of the game, which is
+what `tests/test_clop_roster.py` needs to test the roster as one.

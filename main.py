@@ -815,6 +815,12 @@ def main() -> None:
                 _dossier.path.name, len(_dossier.nations), len(_dossier.alliances),
                 len(_dossier.pending()),
             )
+            _roster = clop_bridge.roster
+            logger.info(
+                "CLOP roster %s: %d nation(s) across %d region(s)%s",
+                _roster.path.name, len(_roster.nations), len(_roster.regions),
+                " — will be re-read on the next lookup" if _roster.is_stale() else "",
+            )
             if agent_loop:
                 agent_loop.clop_unread = clop_unread
                 agent_loop.clop_bridge = clop_bridge
