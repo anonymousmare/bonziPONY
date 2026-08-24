@@ -370,7 +370,7 @@ class Pipeline:
             self.agent_loop.set_conversation_active(True)
 
         self._last_end_conversation = False
-        spoke = self._run_turn(play_ack=False, user_text=text)
+        spoke = self._run_turn(play_ack=False, user_text=text, typed=True)
 
         if self.agent_loop:
             self.agent_loop.set_conversation_active(False)
@@ -520,10 +520,14 @@ class Pipeline:
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 
-    def _run_turn(self, play_ack: bool = True, user_text: str | None = None) -> bool:
+    def _run_turn(self, play_ack: bool = True, user_text: str | None = None,
+                  typed: bool = False) -> bool:
         """
         Execute one listen→think→speak turn.
         Returns True if Dash successfully spoke, False otherwise.
+
+        ``typed`` marks text the user wrote rather than said, which changes exactly one
+        thing: nothing is echoed back on screen. See the heard-text call below.
         """
         _orig_llm = self.llm  # save for finally-block restore (Fix 10)
         try:
@@ -554,7 +558,11 @@ class Pipeline:
                 from core.event_timeline import EventType
                 self._timeline.append(EventType.USER_SAID,
                                       f'User said: "{user_text[:150]}"')
-            if self._on_heard_text:
+            # The overlay under her shows what the microphone *heard* -- a guess, and worth
+            # seeing, because Whisper mishears and the reply only makes sense once you know
+            # what she thinks you said. A typed message is not a guess. Echoing it back put a
+            # bubble on screen saying what the user had just finished writing.
+            if self._on_heard_text and not typed:
                 try:
                     self._on_heard_text(user_text)
                 except Exception:

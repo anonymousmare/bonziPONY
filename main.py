@@ -688,7 +688,13 @@ def main() -> None:
                 pass
 
     def _on_heard_text(text: str) -> None:
-        """Show what the STT heard below the pony."""
+        """Show what the STT heard below the pony.
+
+        Only ever reached for speech: a typed message is not echoed at all (Pipeline._run_turn
+        skips this for typed turns), so this switch governs the transcription overlay only.
+        """
+        if not getattr(config.desktop_pet, "heard_text", True):
+            return
         heard_text.show_heard(text)
 
     def _on_speech_text(text: str) -> None:

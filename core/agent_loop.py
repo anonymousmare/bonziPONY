@@ -94,21 +94,31 @@ def _get_idle_ms() -> int:
         return 0
 
 # ── Spontaneous prompts — mix of casual remarks and genuine engagement ───
-_IDLE_PROMPTS = [
-    # ── Interactive / check-in prompts (the user WANTS these) ──
+#
+# Two pools, kept apart because people want opposite things from them. The check-ins are the
+# caretaker half: have you eaten, had water, been outside, what's on your plate. Some people
+# keep a desktop pony precisely for that. To others it is the thing they were trying to get
+# away from, and being asked whether they have been outside today lands as an assistant with
+# a horn rather than as a friend. `agent.check_ins` decides which pools she draws from; it
+# changes nothing else about when or how often she speaks.
+_CHECKIN_PROMPTS = [
     "Check in with the user! Ask them if there's anything they need to do, any tasks or errands. Be casual and caring about it. ONE sentence.",
     "Ask the user if they've eaten, showered, taken care of themselves today. Be a good friend. ONE sentence.",
     "Ask the user what's on their plate today — any homework, chores, obligations? Keep it casual. ONE sentence.",
-    "Ask the user a random question about their life, interests, or how they're feeling. Be genuinely curious. ONE sentence.",
     "Ask the user what they're working on right now. Show interest. ONE sentence.",
     "Ask the user if they're drinking enough water today. Be caring but casual. ONE sentence.",
     "Ask the user how their day is going so far. ONE sentence, be genuine.",
     "Ask the user what they're planning to do later. Just making conversation. ONE sentence.",
+    "Ask the user if they've been outside today or gotten any fresh air. ONE sentence.",
+]
+
+#: Her, rather than a wellness check: what she is thinking about, curious about, annoyed by.
+#: A question about the user is only in here when it is interest rather than supervision.
+_FLAVOUR_PROMPTS = [
+    "Ask the user a random question about their life, interests, or how they're feeling. Be genuinely curious. ONE sentence.",
     "Ask the user a fun hypothetical question — something silly or thought-provoking. ONE sentence.",
     "Ask the user about something they mentioned before, or ask what music they're into lately. ONE sentence.",
-    "Ask the user if they've been outside today or gotten any fresh air. ONE sentence.",
     "Challenge the user to something fun — a race, a bet, a dare. Keep it playful. ONE sentence.",
-    # ── Personality / flavor prompts ──
     "You're lounging on the desktop. Think about something specific — a memory from Ponyville, something you did recently. Say ONE sentence about it.",
     "You just remembered something funny that happened with your friends. Share it in ONE sentence.",
     "Tell the user something they probably don't know about you. ONE sentence, something personal.",
@@ -116,6 +126,18 @@ _IDLE_PROMPTS = [
     "Complain about something minor or vent about something silly. ONE sentence, in character.",
     "Share an opinion about something random — food, weather, a hobby. ONE sentence.",
 ]
+
+#: Everything she might say when idle, for anything that wants the whole pool.
+_IDLE_PROMPTS = _CHECKIN_PROMPTS + _FLAVOUR_PROMPTS
+
+
+def idle_prompts(check_ins: bool = True) -> List[str]:
+    """The pool an idle remark is drawn from.
+
+    Never empty: with check-ins off she still has ten things to say, so switching them off
+    quiets one kind of remark rather than making her mute.
+    """
+    return _IDLE_PROMPTS if check_ins else _FLAVOUR_PROMPTS
 
 def _get_profile_prompt() -> Optional[str]:
     """
@@ -3863,7 +3885,9 @@ class AgentLoop:
             if profile_prompt and random.random() < 0.4:
                 prompt_choice = profile_prompt
             else:
-                prompt_choice = random.choice(_IDLE_PROMPTS)
+                prompt_choice = random.choice(
+                    idle_prompts(getattr(self._config, "check_ins", True))
+                )
 
             # Add recent conversation context to avoid repeating topics
             avoid_topics = ""

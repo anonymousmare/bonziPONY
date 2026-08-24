@@ -115,7 +115,7 @@ main.py (bootstrap + wiring)
 | `behavior_manager.py` | Parses `pony.ini` behavior definitions (CSV format from Desktop Ponies) |
 | `effect_renderer.py` | Overlay visual effects (Sonic Rainboom, etc.) |
 | `speech_bubble.py` | Comic-style bubble with typing animation, auto-hide, position tracking |
-| `heard_text.py` | Translucent STT transcription overlay below pony |
+| `heard_text.py` | Translucent STT transcription overlay, under her or above her, pointer following |
 | `notification_box.py` | Clickable alert panel, coloured trim, mark-as-read and mute, placed by `stacking` |
 | `panel_style.py` | The palette every floating panel is painted from — one dark panel, shared |
 | `stacking.py` | Where a panel goes when the space above the pony is taken. Pure maths, no Qt |
@@ -500,14 +500,34 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
 40. **Two processes must not write one tab.** Nothing detects it — `clop.sheet_sync: false` is
     the switch for running `clop_monitor.py` yourself instead.
 
-41. **The notification box holds still while the pointer is over it.** It re-places itself
+41. **A typed message is never echoed back.** `Pipeline._run_turn` takes `typed=True` from
+    `run_text_conversation` and skips the heard-text overlay for it. The overlay exists to
+    show what the microphone *heard* — a guess worth checking, because the reply only makes
+    sense once you know what she thinks you said. What the user typed is not a guess, and
+    showing it put a bubble on screen quoting the sentence they had just finished writing.
+    `desktop_pet.heard_text` switches off the speech case as well.
+
+42. **The heard-text pointer flips with the panel.** She is pinned bottom-right by default,
+    so there is no room under her and `_reposition` puts the panel above instead — which was
+    every single time, with a pointer still aimed at the ceiling. `_pointer_up` is set there
+    and read in `paintEvent`, which is why the flip calls `update()`: the pointer is painted,
+    not laid out.
+
+43. **`agent.check_ins` picks a pool, not a frequency.** `_CHECKIN_PROMPTS` is the caretaker
+    half (eaten, water, outside, what's on your plate) and `_FLAVOUR_PROMPTS` is the
+    in-character half. Off means idle remarks are drawn from the second list only — she talks
+    exactly as often. Keep the halves split on that axis; `tests/test_idle_prompts.py` fails
+    if a caretaking line lands in the flavour list.
+
+44. **The notification box holds still while the pointer is over it.** It re-places itself
     30 times a second, so without that guard a speech bubble appearing while you are reaching
     for "Mark as read" would slide the button out from under the click.
 
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 180 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement
+python -m unittest discover -s tests    # 186 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement,
+idle prompts
 cd clop_monitor && python -m unittest   # 623 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```

@@ -121,6 +121,12 @@ class AgentConfig:
     spontaneous_speech_min_s: float = 120.0   # minimum seconds between random check-ins
     spontaneous_speech_max_s: float = 300.0   # maximum seconds between random check-ins
     sustained_focus_threshold_s: float = 900.0
+    #: Let her ask after the user themselves when nothing else is going on -- have you eaten,
+    #: had water, been outside, what's on your plate today. Off leaves her the in-character
+    #: half of the same idle chatter: what she is thinking about, an opinion, a complaint.
+    #: Timing, frequency and every other trigger are unchanged either way; this only decides
+    #: which half of the pool an idle remark is drawn from.
+    check_ins: bool = True
     distraction_keywords: List[str] = field(default_factory=lambda: [
         "youtube", "reddit", "tiktok", "twitch", "twitter", "instagram", "facebook",
     ])
@@ -160,6 +166,10 @@ class DesktopPetConfig:
     #: Screen region to hold, or None to let her wander as a desktop pet normally does.
     #: An advisor that relays notifications wants to be findable in the same place every
     #: time, and the notification box is drawn directly above her.
+    #: Show what the microphone heard, under her, while she thinks about it. This is the
+    #: transcription, not what you typed -- a typed message is never echoed back, because you
+    #: watched yourself write it.
+    heard_text: bool = True
     pin_to: Optional[str] = "bottom_right"
     pin_margin: int = 12               # pixels from the screen's work-area edge
 
@@ -401,6 +411,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             speech_bubble=pet_raw.get("speech_bubble", True),
             font_style=pet_raw.get("font_style", "default"),
             typewriter_sound=pet_raw.get("typewriter_sound", True),
+            heard_text=bool(pet_raw.get("heard_text", True)),
             pin_to=pet_raw.get("pin_to", "bottom_right"),
             pin_margin=pet_raw.get("pin_margin", 12),
         ),
@@ -421,6 +432,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             spontaneous_speech_min_s=agent_raw.get("spontaneous_speech_min_s", 120.0),
             spontaneous_speech_max_s=agent_raw.get("spontaneous_speech_max_s", 300.0),
             sustained_focus_threshold_s=agent_raw.get("sustained_focus_threshold_s", 900.0),
+            check_ins=bool(agent_raw.get("check_ins", True)),
             distraction_keywords=agent_raw.get("distraction_keywords", [
                 "youtube", "reddit", "tiktok", "twitch", "twitter", "instagram", "facebook",
             ]),

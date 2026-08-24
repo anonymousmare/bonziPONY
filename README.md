@@ -579,10 +579,26 @@ The pony always shakes before minimizing or closing. Escalation is graduated, no
 Right-click the pony sprite to access:
 
 - **Directives** — view, add, or clear active goals
+- **Features** — the switches below, plus autonomous mode, desktop control, wake word, TTS
 - **Character** — hotswap between Mane 6 (instant sprite + personality switch)
 - **Scale** — resize the sprite (0.5x–4.0x)
 - **Audio devices** — switch mic/speaker
 - **Quit**
+
+Two switches under **Features** are worth knowing about:
+
+**Check On You (eaten? water? outside?)** — off by way of one click. When she has nothing else
+to say she picks an idle remark from one of two pools: the caretaker one (have you eaten, had
+water, been outside, what's on your plate) and the in-character one (what she is thinking
+about, an opinion, a complaint, a dare). Some people keep a desktop pony precisely for the
+first; to others it is the thing they were trying to get away from. Turning it off leaves only
+the second — she talks exactly as often, about herself instead of about your hydration.
+`agent.check_ins` in config.yaml.
+
+**Show What The Mic Heard** — the little italic panel that appears while she is thinking. It
+shows the *transcription*, which is a guess: Whisper mishears, and her reply makes more sense
+once you can see what she thought you said. A message you **typed** is never echoed back at
+all, switch or no switch — you watched yourself write it. `desktop_pet.heard_text`.
 
 ## Dependencies
 

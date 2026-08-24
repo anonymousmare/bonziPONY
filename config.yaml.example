@@ -76,6 +76,12 @@ agent:
   spontaneous_speech_min_s: 120.0   # min seconds between random check-ins
   spontaneous_speech_max_s: 300.0   # max seconds between random check-ins
   sustained_focus_threshold_s: 900.0
+  check_ins: true                   # let her ask after you — eaten? water? been outside?
+                                    # what's on your plate today. Off, an idle remark is
+                                    # drawn from the in-character half instead: what she is
+                                    # thinking about, an opinion, a complaint. She talks
+                                    # exactly as often either way.
+                                    # Right-click → Features → "Check On You".
   distraction_keywords: ["youtube", "reddit", "tiktok", "twitch", "twitter", "instagram", "facebook"]
 
 watch_mode:
@@ -91,6 +97,9 @@ desktop_pet:
   enabled: true
   scale: 2.0                  # sprite scale factor (originals are ~100px)
   speech_bubble: true          # show text bubbles alongside TTS
+  heard_text: true             # show what the microphone heard, under her, while she thinks.
+                               # Speech only — a message you typed is never echoed back.
+                               # Right-click → Features → "Show What The Mic Heard".
   pin_to: "bottom_right"       # hold one corner instead of wandering.
                                # bottom_right | bottom_left | top_right | top_left | center
                                # | left | right | top | bottom, or null to roam freely.
