@@ -201,6 +201,11 @@ class ClopConfig:
     #: How long a reading of another nation stays trustworthy. Garrisons only change on
     #: war ticks, twelve hours apart, so half that is about its useful life.
     dossier_max_age_hours: float = 6.0
+    #: Find the current /mlp/ general from the board catalog instead of being told where
+    #: it is. Threads archive in a day or two, so a URL in a settings file is stale more
+    #: often than not -- and a stale one reads to the user as "she cannot check the thread".
+    thread_auto_find: bool = True
+    thread_board: str = "mlp"
 
 
 @dataclass
@@ -440,6 +445,8 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             thread_check_hours=float(clop_raw.get("thread_check_hours", 1.0)),
             read_alliance_messages=bool(clop_raw.get("read_alliance_messages", True)),
             dossier_max_age_hours=float(clop_raw.get("dossier_max_age_hours", 6.0)),
+            thread_auto_find=bool(clop_raw.get("thread_auto_find", True)),
+            thread_board=str(clop_raw.get("thread_board", "mlp") or "mlp"),
         ),
         auto_update=auto_update,
         presentation_mode=bool(presentation_mode),

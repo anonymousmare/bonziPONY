@@ -1637,6 +1637,20 @@ class ContextMenuBuilder:
             ("On", "on"),
         ], cfg.strategy_thoughts, lambda v: self._set("clop", "strategy_thoughts", v))
 
+        thread_menu = clop_menu.addMenu("The /mlp/ Thread")
+        reading = thread_menu.addAction(f"Reading: {self._clop_thread_description()}")
+        reading.setEnabled(False)
+        thread_menu.addSeparator()
+        find = thread_menu.addAction("Find the current thread now")
+        find.triggered.connect(lambda: self._find_clop_thread(parent))
+        find.setEnabled(self.clop_bridge is not None
+                        and getattr(self.clop_bridge, "available", False))
+        self._add_toggle(
+            thread_menu, "Find it automatically",
+            getattr(cfg, "thread_auto_find", True),
+            lambda c: self._set("clop", "thread_auto_find", c),
+        )
+
         self._radio_submenu(clop_menu, "Read the /mlp/ Thread", [
             ("Off", 0.0),
             ("Every 30 min", 0.5),
@@ -1654,6 +1668,41 @@ class ContextMenuBuilder:
             getattr(cfg, "read_alliance_messages", True),
             lambda c: self._set_clop_alliance_chat(c, parent),
         )
+
+    def _clop_thread_description(self) -> str:
+        bridge = self.clop_bridge
+        if bridge is None or not getattr(bridge, "available", False):
+            return "not connected"
+        try:
+            return bridge.thread_description()
+        except Exception:       # a broken description must not break the menu
+            return "unknown"
+
+    def _find_clop_thread(self, parent: QWidget) -> None:
+        """Go and look for the current general now, rather than waiting for a read."""
+        bridge = self.clop_bridge
+        if bridge is None:
+            return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            found = bridge._ensure_thread(force=True)
+        except Exception as exc:
+            found = False
+            logger.warning("Thread search failed: %s", exc)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if found:
+            QMessageBox.information(
+                parent, "4CLOP Thread",
+                f"Now reading {bridge.thread_description()}.")
+        else:
+            QMessageBox.warning(
+                parent, "4CLOP Thread",
+                "Could not find the thread on /mlp/ right now.\n\n"
+                "Either the board is unreachable, or no live thread looks like the game's\n"
+                "general — it may have archived before a new one went up. She will try\n"
+                "again on her next read.")
 
     def _set_clop_alliance_chat(self, checked: bool, parent: QWidget) -> None:
         if checked:

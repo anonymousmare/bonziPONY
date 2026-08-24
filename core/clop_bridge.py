@@ -143,6 +143,16 @@ class ClopBridge:
             max_age_hours=float(getattr(clop_config, "dossier_max_age_hours", 6.0))
         )
 
+        from core.clop_catalog import ThreadResolver
+
+        #: Which /mlp/ thread is the game's general right now. Shared by the hourly check
+        #: and by an on-demand [LOOKUP:thread] so the two never disagree about what "the
+        #: thread" means.
+        self._thread_resolver = ThreadResolver(
+            board=getattr(clop_config, "thread_board", "mlp") or "mlp",
+            game_domain=self._game_domain(clop_config),
+        )
+
         self.monitor = None
         self.client = None
         self.settings = None
@@ -161,6 +171,14 @@ class ClopBridge:
     @property
     def available(self) -> bool:
         return self.client is not None
+
+    @staticmethod
+    def _game_domain(clop_config) -> str:
+        """The game's own hostname, which is what identifies its thread on the board."""
+        from urllib.parse import urlparse
+
+        host = urlparse(getattr(clop_config, "base_url", "") or "").hostname or "4clop.org"
+        return host[4:] if host.startswith("www.") else host
 
     def _path(self, configured: Optional[str], *default: str) -> Path:
         if configured:
@@ -415,10 +433,56 @@ class ClopBridge:
         return clop_pages.parse_news(html)
 
     def thread_posts(self) -> List[Any]:
-        """Every post in the configured 4chan thread."""
+        """Every post in the current 4chan thread, finding that thread if need be.
+
+        A thread archives within a day or two, so "the thread" is a moving target and a URL
+        in a settings file is stale more often than not. When none is configured -- or the
+        configured one has stopped returning posts, which is what archiving looks like from
+        here -- she goes and finds the current one from the board catalog.
+        """
         self._require()
+        if self.client.fourchan_thread is None and not self._ensure_thread():
+            return []
+
         with self.lock:
-            return self.client.fourchan_thread_posts()
+            posts = self.client.fourchan_thread_posts()
+        if posts:
+            return posts
+
+        # Configured but empty: most likely archived. Look again, once.
+        if self._ensure_thread(force=True):
+            with self.lock:
+                return self.client.fourchan_thread_posts()
+        return []
+
+    def _ensure_thread(self, force: bool = False) -> bool:
+        """Point the client at the current thread. Returns False if none could be found."""
+        if not self.config.thread_auto_find:
+            return self.client.fourchan_thread is not None
+
+        found = self._thread_resolver.resolve(force=force)
+        if found is None:
+            return False
+        try:
+            settings = self.monitor.parse_fourchan_thread_url(found.url(self._thread_resolver.board))
+        except Exception as exc:
+            logger.warning("Found a thread but could not use its URL: %s", exc)
+            return False
+        with self.lock:
+            self.client.fourchan_thread = settings
+        logger.info("Now reading /%s/%d — %s",
+                    self._thread_resolver.board, found.number, found.subject)
+        return True
+
+    def thread_description(self) -> str:
+        """What she is reading, for the settings menu and for logs."""
+        thread = self.client.fourchan_thread if self.client else None
+        if thread is None:
+            found = self._thread_resolver.current
+            return f"{found.subject} (not loaded yet)" if found else "no thread found yet"
+        found = self._thread_resolver.current
+        subject = f" — {found.subject}" if found and found.number == thread.thread_id else ""
+        return f"/{thread.board}/{thread.thread_id}{subject}"
 
     def _require(self) -> None:
         if not self.available:

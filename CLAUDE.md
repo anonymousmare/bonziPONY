@@ -77,6 +77,7 @@ main.py (bootstrap + wiring)
 | `clop_tools.py` | The lookups she can ask for instead of guessing | `LOOKUPS`, `ToolRegistry` |
 | `clop_lore.py` | Game facts auto-injected when she mentions something | `context_for()` |
 | `clop_thread.py` | The hourly thread read and the cheap gate in front of it | `ThreadState`, `decide()` |
+| `clop_catalog.py` | Finds the current /mlp/ general, because threads archive daily | `find_thread()`, `ThreadResolver` |
 | `clop_dossier.py` | What she has learned about other nations, persisted and stamped | `DossierStore`, `store()` |
 | `warcalc.py` | Battle simulation, ported from the game's own combat loop | `simulate()`, `force_cost()` |
 | `routines.py` | Persistent scheduled actions (wake/sleep/daily/weekly/interval) | `RoutineManager` |
@@ -394,10 +395,25 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     solely by the monitor's own `main()`. Neither runs in-process, so the monitor's
     `.env.example` overstates what is required when it is running as her.
 
+30. **The thread URL is found, not configured.** A 4chan thread archives in a day or two,
+    so `fourchan.thread_url` in the monitor's `settings.json` is stale more often than
+    not — and a fresh clone has no `settings.json` at all, which made
+    `[LOOKUP:thread]` answer "no 4chan thread is configured" out of the box. That reads as
+    *she cannot check the thread*. `clop_catalog` scores the board catalog instead;
+    `ClopBridge.thread_posts` resolves on demand and re-resolves when a configured thread
+    returns nothing, which is what archiving looks like from here.
+
+31. **The game's domain is what identifies its thread, not the word "clop".** /mlp/ uses
+    that word constantly and means pony pornography by it. Only the OP's link to
+    `4clop.org` separates the general from a clopfic thread, so it is weighted to carry a
+    match alone, and `\bclop\b` is word-bounded so "clopfic" scores nothing.
+    `tests/fixtures/mlp_catalog.json` is a real catalog response that keeps one such
+    false positive on purpose.
+
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 80 tests: lorebook, lookups, dossier, settings
+python -m unittest discover -s tests    # 101 tests: lorebook, lookups, dossier, settings, thread
 cd clop_monitor && python -m unittest   # 615 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
