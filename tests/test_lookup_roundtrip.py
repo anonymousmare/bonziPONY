@@ -46,11 +46,23 @@ class StubProvider(LLMProvider):
         self._history.clear()
 
 
-def make_pipeline(replies):
+class _Config:
+    """Just enough config for the lookup path.
+
+    ``warcalc_page`` is off deliberately: with it on, a [WARCALC:] in a test would open a
+    real browser window on the machine running the suite.
+    """
+
+    class clop:
+        warcalc_page = False
+
+
+def make_pipeline(replies, config=None):
     """A Pipeline with only the parts the lookup path touches."""
     pipeline = Pipeline.__new__(Pipeline)
     pipeline.llm = StubProvider(replies)
     pipeline.agent_loop = None
+    pipeline.config = config or _Config()
     return pipeline
 
 
@@ -109,6 +121,30 @@ class LookupRoundTripTests(unittest.TestCase):
         # The numbers verified against the browser warcalc across 2,000 battles.
         self.assertIn("lost 33", second)
         self.assertIn("lost 45", second)
+
+    def test_the_warcalc_page_is_not_opened_when_it_is_switched_off(self):
+        """The flag has to reach run_warcalc, not just exist in config.
+
+        This is also what keeps the suite from opening browser windows, so if the wiring
+        changes shape, the failure shows up here rather than on somebody's desktop.
+        """
+        import core.clop_tools as clop_tools
+
+        seen = {}
+        original = clop_tools.run_warcalc
+
+        def spy(attackers, defenders, defender_bonus=True, show_page=False):
+            seen["show_page"] = show_page
+            return original(attackers, defenders, defender_bonus, show_page=False)
+
+        clop_tools.run_warcalc = spy
+        try:
+            body = "40 Unicorns vs 60 Pegasi"
+            pipeline = make_pipeline([f"[WARCALC:{body}]", "close one."])
+            pipeline._resolve_lookups(parse_response(f"[WARCALC:{body}]"), "can I win")
+        finally:
+            clop_tools.run_warcalc = original
+        self.assertIs(seen.get("show_page"), False)
 
     def test_a_bad_lookup_comes_back_as_text_not_an_exception(self):
         pipeline = make_pipeline(["[LOOKUP:Cheese Factory]", "no such thing, apparently."])

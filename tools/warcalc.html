@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warcalc — CLOP</title>
+<style>
+:root{
+  --bg:#272b30;
+  --text:#c8c8c8;
+  --text-dim:#8b9198;
+  --sunken:#1c1e22;
+  --raised:#2e3338;
+  --border:#1c1e22;
+  --border-soft:rgba(0,0,0,.6);
+  --link:#ffffff;
+
+  --btn-default-a:#484e55; --btn-default-b:#313539;
+  --btn-primary-a:#8a9196; --btn-primary-b:#70787d;
+  --btn-success-a:#78cc78; --btn-success-b:#53be53;
+  --btn-info-a:#74cae3;    --btn-info-b:#4ab9db;
+  --btn-warning-a:#faa123; --btn-warning-b:#e48806;
+  --btn-danger-a:#f17a77;  --btn-danger-b:#ec4d49;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font:14px/1.45 "Helvetica Neue",Helvetica,Arial,sans-serif;
+  padding:20px;
+}
+h1,h2,h3{margin:0 0 10px;font-weight:500;color:#fff;letter-spacing:.01em}
+h1{font-size:26px}
+h2{font-size:19px}
+h3{font-size:15px;color:var(--text)}
+a{color:var(--link)}
+.mono{font-family:"SFMono-Regular",Menlo,Consolas,monospace}
+.muted{color:var(--text-dim)}
+.small{font-size:12px}
+
+/* ---------- surfaces ---------- */
+.panel{
+  background:var(--raised);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:14px;
+  margin-bottom:16px;
+}
+.well{
+  background:var(--sunken);
+  border:1px solid var(--border-soft);
+  border-radius:4px;
+  padding:12px;
+}
+.panel-head{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding-bottom:10px;margin-bottom:12px;
+  border-bottom:1px solid var(--border-soft);
+}
+.panel-head h2{margin:0;flex:0 0 auto}
+.spacer{flex:1 1 auto}
+
+/* ---------- controls ---------- */
+.btn{
+  display:inline-block;border:1px solid var(--border-soft);border-radius:4px;
+  padding:5px 12px;font-size:13px;font-weight:500;color:#fff;cursor:pointer;
+  text-shadow:0 -1px 0 rgba(0,0,0,.4);
+  background-image:linear-gradient(to bottom,var(--btn-default-a),var(--btn-default-b));
+}
+.btn:hover{filter:brightness(1.14)}
+.btn:active{filter:brightness(.9)}
+.btn:focus-visible{outline:2px solid #74cae3;outline-offset:1px}
+.btn-primary{background-image:linear-gradient(to bottom,var(--btn-primary-a),var(--btn-primary-b))}
+.btn-success{background-image:linear-gradient(to bottom,var(--btn-success-a),var(--btn-success-b))}
+.btn-info{background-image:linear-gradient(to bottom,var(--btn-info-a),var(--btn-info-b))}
+.btn-warning{background-image:linear-gradient(to bottom,var(--btn-warning-a),var(--btn-warning-b))}
+.btn-danger{background-image:linear-gradient(to bottom,var(--btn-danger-a),var(--btn-danger-b))}
+.btn-xs{padding:2px 8px;font-size:12px}
+
+.badge{
+  display:inline-block;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600;color:#fff;
+  text-shadow:0 -1px 0 rgba(0,0,0,.4);border:1px solid var(--border-soft);
+  background-image:linear-gradient(to bottom,var(--btn-default-a),var(--btn-default-b));
+}
+.badge-success{background-image:linear-gradient(to bottom,var(--btn-success-a),var(--btn-success-b))}
+.badge-danger{background-image:linear-gradient(to bottom,var(--btn-danger-a),var(--btn-danger-b))}
+.badge-info{background-image:linear-gradient(to bottom,var(--btn-info-a),var(--btn-info-b))}
+.badge-warning{background-image:linear-gradient(to bottom,var(--btn-warning-a),var(--btn-warning-b))}
+
+input,select,textarea{
+  background:#fff;color:#22262a;border:1px solid var(--border-soft);border-radius:3px;
+  padding:4px 6px;font:13px/1.3 inherit;
+}
+input:focus,select:focus,textarea:focus{outline:2px solid #4ab9db;outline-offset:-1px}
+input[type=number]{width:100%}
+select{width:100%}
+textarea{width:100%;min-height:170px;font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:12px}
+label{font-size:12px;color:var(--text-dim);display:block;margin-bottom:3px}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse;width:100%}
+th,td{padding:5px 7px;text-align:left;vertical-align:middle}
+thead th{
+  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);
+  font-weight:600;border-bottom:1px solid var(--border-soft);
+}
+tbody tr{border-bottom:1px solid rgba(0,0,0,.35)}
+tbody tr:last-child{border-bottom:none}
+
+.force-table td{padding:6px 5px}
+.col-sprite{width:86px}
+.col-type{width:120px}
+.col-weapon{width:150px}
+.col-armor{width:130px}
+.col-size{width:82px}
+.col-train{width:78px}
+.col-del{width:34px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:1100px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* ---------- sprite ---------- */
+.sprite{
+  width:80px;height:50px;display:block;object-fit:contain;
+  background:var(--sunken);border:1px solid var(--border-soft);border-radius:3px;
+}
+.sprite-lg{width:80px;height:50px;margin:0 auto}
+.sprite-missing.sprite-lg{margin:0 auto}
+.sprite-missing{
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-dim);font-size:20px;font-weight:600;
+}
+.sprite-missing.sprite-lg{font-size:20px}
+
+/* ---------- log ---------- */
+.log{
+  max-height:320px;overflow:auto;font-family:"SFMono-Regular",Menlo,Consolas,monospace;
+  font-size:12px;line-height:1.6;
+}
+.log div{padding:2px 0;border-bottom:1px solid rgba(0,0,0,.25)}
+.log b{color:#fff;font-weight:600}
+.unit-ref{font-weight:600;cursor:help;border-bottom:1px dotted currentColor}
+.ref-atk{color:#f17a77}
+.ref-def{color:#74cae3}
+
+#tip{
+  position:fixed;z-index:999;display:none;pointer-events:none;
+  background:var(--raised);border:1px solid var(--border);border-radius:4px;
+  padding:10px;min-width:230px;max-width:400px;box-shadow:0 8px 22px rgba(0,0,0,.6);
+}
+.tip-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}
+.tip-head > div{line-height:1.15}
+.tip-head > div > div{margin-top:1px}
+.tip-title{color:#fff;font-weight:600;font-size:13px;line-height:1.2}
+.tip-math td{font-size:12px;padding:1px 4px}
+.tip-math tbody tr{border:none}
+.tip-math .n{text-align:right;font-family:"SFMono-Regular",Menlo,Consolas,monospace}
+.tip-math .tot td{border-top:1px solid var(--border-soft);padding-top:4px;color:#fff}
+.dmg-ref{cursor:help;border-bottom:1px dotted currentColor}
+.tip-table{width:100%;border-top:1px solid var(--border-soft);padding-top:4px}
+.tip-table th{font-size:10px;padding:3px 4px}
+.tip-table td{font-size:12px;padding:1px 4px}
+.tip-table tbody tr{border:none}
+.kill{color:#f17a77;font-weight:600}
+.hurt{color:#faa123}
+
+.surv-card{
+  width:150px;text-align:center;padding:10px;border-radius:4px;
+  border:1px solid var(--border-soft);background:var(--sunken);
+}
+.surv-atk{background:#241a1a;border-color:rgba(241,122,119,.22)}
+.surv-def{background:#1a2026;border-color:rgba(116,202,227,.18)}
+.surv-dead{opacity:.45}
+.surv-col h3{margin-bottom:8px}
+.surv-grid{display:flex;gap:12px;flex-wrap:wrap}
+
+.note{
+  border-left:3px solid #4ab9db;background:rgba(74,202,227,.07);
+  padding:8px 11px;border-radius:0 3px 3px 0;font-size:12.5px;margin-bottom:14px;
+}
+.note.warn{border-left-color:#faa123;background:rgba(250,161,35,.07)}
+details summary{cursor:pointer;color:#fff;font-size:13px;padding:2px 0}
+.stat-table input{width:62px;text-align:right;font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:12px}
+.stat-table td,.stat-table th{padding:3px 5px;font-size:12px}
+.stat-table tbody th{font-weight:500;color:var(--text);text-transform:none;letter-spacing:0;border:none}
+
+/* ---------- top bar / presets ---------- */
+.topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.topbar h1{margin:0}
+.caret-btn{
+  background:none;border:none;color:var(--text-dim);font-size:20px;line-height:1;
+  cursor:pointer;padding:0 4px;transition:transform .12s;display:inline-block;
+}
+.caret-btn:hover{color:#fff}
+.caret-btn.open{transform:rotate(90deg)}
+.battle-presets{display:flex;align-items:center;gap:4px;opacity:.45;transition:opacity .15s}
+.battle-presets:hover,.battle-presets:focus-within{opacity:1}
+.bp-lab{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em}
+.bp-sel{width:auto;max-width:150px;font-size:11px;padding:1px 4px;background:var(--sunken);color:var(--text);border-color:var(--border-soft)}
+.bp-btn{
+  background:none;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;padding:1px 3px;
+}
+.bp-btn:hover{color:#fff;text-decoration:underline}
+.army-presets{display:flex;align-items:center;gap:4px;opacity:.45;transition:opacity .15s}
+.army-presets:hover,.army-presets:focus-within{opacity:1}
+.ap-sel{width:auto;max-width:112px;font-size:11px;padding:1px 4px;
+  background:var(--sunken);color:var(--text);border-color:var(--border-soft)}
+.v-div{color:var(--text-dim);opacity:.4;font-size:12px;margin:0 1px}
+
+/* ---------- resources ---------- */
+.res-icon{
+  width:16px;height:16px;display:block;flex:0 0 16px;
+  image-rendering:pixelated;image-rendering:crisp-edges;
+}
+.res-chip{display:inline-flex;align-items:center;gap:4px;margin:0 9px 0 0;font-size:12px;white-space:nowrap;vertical-align:middle;line-height:16px}
+.res-chip .mono{font-size:12px}
+.res-none{color:var(--text-dim);font-size:12px;font-style:italic}
+.bits{font-family:"SFMono-Regular",Menlo,Consolas,monospace;color:#fff}
+
+/* ---------- cost footer ---------- */
+.cost-foot{
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft);
+}
+.cost-drop > summary{
+  font-size:12px;color:var(--text-dim);list-style:none;display:inline-flex;gap:5px;align-items:center;
+  text-transform:uppercase;letter-spacing:.06em;font-weight:600;
+}
+.cost-drop > summary::-webkit-details-marker{display:none}
+.cost-drop > summary:before{content:"▸";display:inline-block;transition:transform .12s}
+.cost-drop[open] > summary:before{transform:rotate(90deg)}
+.cost-drop > summary:hover{color:#fff}
+.cost-body{padding-top:8px}
+.cost-row{
+  display:flex;gap:10px;align-items:center;padding:3px 0;font-size:12px;
+}
+.cost-row .cost-label{flex:0 0 138px;color:var(--text-dim)}
+.cost-row .cost-val{flex:1 1 auto;text-align:left}
+.has-tip > .cost-label{border-bottom:1px dotted var(--text-dim);cursor:help;display:inline-block;flex:0 0 138px}
+
+/* Resources row doubles as the raw dropdown */
+.res-drop > summary{list-style:none;cursor:pointer}
+.res-drop > summary::-webkit-details-marker{display:none}
+.res-drop > summary .caret{display:inline-block;transition:transform .12s;color:var(--text-dim)}
+.res-drop[open] > summary .caret{transform:rotate(90deg)}
+.res-drop > summary:hover .cost-label{color:#fff}
+.res-drop .raw-body{padding:2px 0 2px 12px}
+.res-drop .raw-body .cost-label{flex:0 0 126px}
+
+.tip-cost{border-top:1px solid var(--border-soft);margin-top:8px;padding-top:6px;font-size:12px}
+.tip-upkeep{width:80px;display:flex;flex-wrap:wrap;justify-content:center;gap:3px;margin-top:4px}
+.tip-upkeep .res-chip{margin:0}
+.tip-break td{font-size:12px;padding:6px 4px;vertical-align:top}
+.tip-break tbody tr{border:none}
+.tip-break tbody tr + tr td{border-top:1px solid var(--border-soft)}
+.tip-break .u{color:#fff;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Warcalc <button class="caret-btn" id="btnTools" title="Import / export presets" aria-expanded="false">›</button></h1>
+  <span class="spacer"></span>
+  <div class="battle-presets">
+    <span class="bp-lab">battle</span>
+    <select id="bpSel" class="bp-sel"><option value="">—</option></select>
+    <button class="bp-btn" id="bpLoad" title="Load this battle">load</button>
+    <button class="bp-btn" id="bpSave" title="Save both sides as a battle">save</button>
+    <button class="bp-btn" id="bpDel" title="Delete this battle">del</button>
+  </div>
+</div>
+
+<div class="panel" id="toolsPanel" style="display:none">
+  <div class="panel-head"><h2>Presets</h2><span class="spacer"></span>
+    <span class="small muted" id="toolsCount"></span></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-xs" id="expArmies">Export army presets (JSON)</button>
+    <button class="btn btn-xs" id="expBattles">Export battle presets (JSON)</button>
+    <button class="btn btn-xs" id="expAll">Export everything</button>
+    <button class="btn btn-xs btn-info" id="impBtn">Import JSON…</button>
+    <input type="file" id="impFile" accept="application/json,.json" style="display:none">
+    <span class="spacer"></span>
+    <button class="btn btn-xs btn-danger" id="wipeSaves">Wipe saved data</button>
+  </div>
+  <div class="small muted" style="margin-top:8px">
+    Everything is stored in this browser only. Autosave keeps your current battle across reloads.
+  </div>
+</div>
+
+<!-- ============ FORCES ============ -->
+<div class="grid2">
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Attackers</h2>
+      <span class="badge badge-danger" id="atkCount">0</span>
+      <span class="spacer"></span>
+      <div class="army-presets">
+        <select class="ap-sel" data-ap-sel="attacker"><option value="">preset…</option></select>
+        <button class="bp-btn" data-ap-load="attacker" title="Load this army">load</button>
+        <button class="bp-btn" data-ap-save="attacker" title="Save this side as an army preset">save</button>
+        <button class="bp-btn" data-ap-del="attacker" title="Delete this army preset">del</button>
+      </div>
+      <span class="v-div">|</span>
+      <button class="btn btn-xs" data-add="attacker">Add unit</button>
+      <button class="btn btn-xs" data-clear="attacker">Clear</button>
+    </div>
+    <table class="force-table">
+      <thead><tr>
+        <th class="col-sprite">Unit</th><th class="col-type">Type</th><th class="col-weapon">Weapon</th>
+        <th class="col-armor">Armor</th><th class="col-size">Size</th><th class="col-train">Training</th><th class="col-del"></th>
+      </tr></thead>
+      <tbody id="tbodyAttacker"></tbody>
+    </table>
+    <div class="cost-foot" id="costAttacker"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Defenders</h2>
+      <span class="badge badge-info" id="defCount">0</span>
+      <span class="spacer"></span>
+      <div class="army-presets">
+        <select class="ap-sel" data-ap-sel="defender"><option value="">preset…</option></select>
+        <button class="bp-btn" data-ap-load="defender" title="Load this army">load</button>
+        <button class="bp-btn" data-ap-save="defender" title="Save this side as an army preset">save</button>
+        <button class="bp-btn" data-ap-del="defender" title="Delete this army preset">del</button>
+      </div>
+      <span class="v-div">|</span>
+      <button class="btn btn-xs" data-add="defender">Add unit</button>
+      <button class="btn btn-xs" data-clear="defender">Clear</button>
+    </div>
+    <table class="force-table">
+      <thead><tr>
+        <th class="col-sprite">Unit</th><th class="col-type">Type</th><th class="col-weapon">Weapon</th>
+        <th class="col-armor">Armor</th><th class="col-size">Size</th><th class="col-train">Training</th><th class="col-del"></th>
+      </tr></thead>
+      <tbody id="tbodyDefender"></tbody>
+    </table>
+    <div class="cost-foot" id="costDefender"></div>
+  </div>
+</div>
+
+<!-- ============ RUN ============ -->
+<div class="panel">
+  <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+    <div style="width:150px">
+      <label for="defBonus">Defender bonus</label>
+      <select id="defBonus"><option value="Yes">Yes</option><option value="No">No</option></select>
+    </div>
+    <button class="btn btn-success" id="btnRun" style="padding:7px 22px;font-size:14px">Resolve battle</button>
+    <button class="btn" id="btnClearResults" style="padding:7px 16px;font-size:14px">Clear</button>
+  </div>
+</div>
+
+<!-- ============ RESULTS ============ -->
+<div id="results"></div>
+<div id="tip"></div>
+
+<!-- ============ IMPORT ============ -->
+<div class="panel">
+  <div class="panel-head"><h2>Import units</h2></div>
+  <textarea id="txtImport" spellcheck="false" placeholder="4_ACFU_Nope&#10;Cavalry&#10;ACFU&#10;Nope&#10;Size: 200&#10;Training: 20"></textarea>
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-xs" id="btnImportAtk">Import to attackers</button>
+    <button class="btn btn-xs" id="btnImportDef">Import to defenders</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ===================================================================
+   1. DEFINITIONS  (mirrors $forcetypes / $weapontypes / $armortypes)
+   =================================================================== */
+
+const FORCE_TYPES = {Cavalry:1, Tanks:2, Pegasi:3, Unicorns:4, Naval:5, Alicorns:6};
+const TYPES = {1:"cavalry", 2:"tanks", 3:"pegasi", 4:"unicorns", 5:"naval"};
+const TYPE_NUMS = [1,2,3,4,5];
+
+const WEAPON_IDS = {ScroungedWeapons:0,"PRC-E6":1,"PRC-E7":2,"PRC-E8":3,ACFU:4,ATFU:5,APFU:6,AUFU:7,
+  K9P:8,"ELBO-GRS":9,"Chem-LightBattery":10,PropWash:11,SteamBucket:12,CanopyLights:13,
+  LongStand:14,LongWeight:15,GridSquares:16,Shoreline:17,WaterHammer:18,WaterlineEraser:19};
+
+const ARMOR_IDS = {ScroungedArmor:0,Barding:1,Bigdog:2,Nope:3,Trundle:4,Shepherd:5,Ohno:6,Titan:7,
+  Cooler:8,Wonder:9,Griffin:10,Dragon:11,Hornshield:12,Librarian:13,Shining:14,D2A:15,
+  "C-PON3":16,Esohes:17,Shubidu:18};
+
+// Which weapons/armor each unit type may equip (from bindDropdownsInner)
+const LOADOUTS = {
+  Alicorns:{weapons:["ScroungedWeapons"], armor:["ScroungedArmor"]},
+  Cavalry:{weapons:["ScroungedWeapons","PRC-E6","PRC-E7","PRC-E8","ACFU","ATFU","APFU","AUFU"],
+           armor:["ScroungedArmor","Barding","Bigdog","Nope"]},
+  Tanks:{weapons:["ScroungedWeapons","K9P","ELBO-GRS","Chem-LightBattery"],
+         armor:["ScroungedArmor","Trundle","Shepherd","Ohno","Titan"]},
+  Pegasi:{weapons:["ScroungedWeapons","PropWash","SteamBucket","CanopyLights"],
+          armor:["ScroungedArmor","Cooler","Wonder","Griffin","Dragon"]},
+  Unicorns:{weapons:["ScroungedWeapons","LongStand","LongWeight","GridSquares"],
+            armor:["ScroungedArmor","Hornshield","Librarian","Shining","D2A"]},
+  Naval:{weapons:["ScroungedWeapons","Shoreline","WaterHammer","WaterlineEraser"],
+         armor:["ScroungedArmor","C-PON3","Esohes","Shubidu"]}
+};
+
+const LABELS = {"Chem-LightBattery":"Chem-Light Battery",PropWash:"Prop Wash",SteamBucket:"Steam Bucket",
+  CanopyLights:"Canopy Lights",LongStand:"Long Stand",LongWeight:"Long Weight",GridSquares:"Grid Squares",
+  WaterHammer:"Water Hammer",WaterlineEraser:"Waterline Eraser",ScroungedWeapons:"Scrounged Weapons",
+  ScroungedArmor:"Scrounged Armor"};
+const label = k => LABELS[k] || k;
+
+/* weapondefs / armordefs, verbatim from tables_with_data.sql.
+   ids 0 (Scrounged) are absent by design: the PHP treats id 0 as falsy
+   and applies its hardcoded 0.25 damage / 1.0 armor fallbacks. */
+let WEAPON_DEFS = {
+  "PRC-E6":            {cavalry:0.80, tanks:0.80, pegasi:0.80, unicorns:0.80, naval:0.80},
+  "PRC-E7":            {cavalry:0.90, tanks:0.90, pegasi:0.90, unicorns:0.90, naval:0.90},
+  "PRC-E8":            {cavalry:1.00, tanks:1.00, pegasi:1.00, unicorns:1.00, naval:1.10},
+  "ACFU":              {cavalry:1.50, tanks:1.00, pegasi:1.00, unicorns:1.00, naval:1.00},
+  "ATFU":              {cavalry:1.00, tanks:1.50, pegasi:1.00, unicorns:1.00, naval:1.00},
+  "APFU":              {cavalry:1.00, tanks:1.00, pegasi:1.50, unicorns:1.00, naval:1.00},
+  "AUFU":              {cavalry:1.00, tanks:1.00, pegasi:1.00, unicorns:1.50, naval:1.00},
+  "K9P":               {cavalry:1.30, tanks:1.10, pegasi:1.10, unicorns:1.10, naval:1.10},
+  "ELBO-GRS":          {cavalry:1.20, tanks:1.40, pegasi:1.20, unicorns:1.20, naval:1.20},
+  "Chem-LightBattery": {cavalry:1.25, tanks:1.25, pegasi:1.25, unicorns:1.70, naval:1.25},
+  "PropWash":          {cavalry:1.50, tanks:1.25, pegasi:1.25, unicorns:1.25, naval:1.25},
+  "SteamBucket":       {cavalry:1.30, tanks:1.30, pegasi:1.30, unicorns:1.30, naval:1.60},
+  "CanopyLights":      {cavalry:1.40, tanks:2.20, pegasi:1.40, unicorns:1.40, naval:1.40},
+  "LongStand":         {cavalry:2.20, tanks:1.90, pegasi:1.90, unicorns:1.90, naval:1.90},
+  "LongWeight":        {cavalry:1.95, tanks:1.95, pegasi:1.95, unicorns:1.95, naval:2.20},
+  "GridSquares":       {cavalry:2.00, tanks:2.00, pegasi:3.00, unicorns:2.00, naval:2.00},
+  "Shoreline":         {cavalry:1.00, tanks:1.35, pegasi:1.00, unicorns:1.00, naval:1.00},
+  "WaterHammer":       {cavalry:1.10, tanks:1.10, pegasi:1.10, unicorns:1.35, naval:1.10},
+  "WaterlineEraser":   {cavalry:1.25, tanks:1.25, pegasi:1.25, unicorns:1.25, naval:1.25}
+};
+
+let ARMOR_DEFS = {
+  "Barding":   {cavalry:0.40, tanks:0.80, pegasi:0.80, unicorns:0.80, naval:0.80},
+  "Bigdog":    {cavalry:0.65, tanks:0.40, pegasi:0.65, unicorns:0.65, naval:0.65},
+  "Nope":      {cavalry:0.50, tanks:0.50, pegasi:0.50, unicorns:0.50, naval:0.50},
+  "Trundle":   {cavalry:0.30, tanks:0.65, pegasi:0.65, unicorns:0.65, naval:0.65},
+  "Shepherd":  {cavalry:0.55, tanks:0.55, pegasi:0.55, unicorns:0.55, naval:0.35},
+  "Ohno":      {cavalry:0.45, tanks:0.35, pegasi:0.45, unicorns:0.45, naval:0.45},
+  "Titan":     {cavalry:0.35, tanks:0.40, pegasi:0.40, unicorns:0.30, naval:0.40},
+  "Cooler":    {cavalry:0.80, tanks:0.80, pegasi:0.35, unicorns:0.80, naval:0.80},
+  "Wonder":    {cavalry:0.30, tanks:0.70, pegasi:0.70, unicorns:0.70, naval:0.70},
+  "Griffin":   {cavalry:0.45, tanks:0.45, pegasi:0.45, unicorns:0.45, naval:0.40},
+  "Dragon":    {cavalry:0.35, tanks:0.35, pegasi:0.45, unicorns:0.45, naval:0.45},
+  "Hornshield":{cavalry:0.30, tanks:0.65, pegasi:0.65, unicorns:0.65, naval:0.65},
+  "Librarian": {cavalry:0.55, tanks:0.55, pegasi:0.55, unicorns:0.30, naval:0.55},
+  "Shining":   {cavalry:0.45, tanks:0.45, pegasi:0.45, unicorns:0.45, naval:0.35},
+  "D2A":       {cavalry:0.35, tanks:0.40, pegasi:0.35, unicorns:0.40, naval:0.40},
+  "C-PON3":    {cavalry:0.65, tanks:0.65, pegasi:0.65, unicorns:0.65, naval:0.30},
+  "Esohes":    {cavalry:0.35, tanks:0.35, pegasi:0.55, unicorns:0.55, naval:0.55},
+  "Shubidu":   {cavalry:0.40, tanks:0.40, pegasi:0.40, unicorns:0.40, naval:0.40}
+};
+
+/* ===================================================================
+   1b. ECONOMY — resources, recipes, unit hire/upkeep, gear build costs
+   =================================================================== */
+
+const BIT = "฿";
+
+const money = n => Math.round(n).toLocaleString("en-US");
+
+const RESOURCES = {
+  copper:    {name:"Copper",          icon:"https://i.imgur.com/TWh8Vg9.png"},
+  tungsten:  {name:"Tungsten",        icon:"https://i.imgur.com/1c5PwQO.png"},
+  plastics:  {name:"Plastics",        icon:"https://i.imgur.com/Zi6VRsJ.png"},
+  gems:      {name:"Gems",            icon:"https://i.imgur.com/k6UcQYS.png"},
+  energy:    {name:"Energy",          icon:"https://i.imgur.com/euGAJaL.png"},
+  oil:       {name:"Oil",             icon:"https://i.imgur.com/zvueJJj.png"},
+  apples:    {name:"Apples",          icon:"https://i.imgur.com/2leAiCK.png"},
+  coffee:    {name:"Coffee",          icon:"https://i.imgur.com/LdolLL8.png"},
+  gasoline:  {name:"Gasoline",        icon:"https://i.imgur.com/82T1Csv.png"},
+  machinery: {name:"Machinery Parts", icon:"https://i.imgur.com/NVx5mLK.png"},
+  vehicle:   {name:"Vehicle Parts",   icon:"https://i.imgur.com/SaDikbH.png"},
+  precision: {name:"Precision Parts", icon:"https://i.imgur.com/IIdIWXQ.png"},
+  composites:{name:"Composites",      icon:"https://i.imgur.com/lFE7mIe.png"}
+};
+const RES_ORDER = Object.keys(RESOURCES);
+
+/* crafted parts -> raw components + the bits the crafting step costs */
+const CRAFT = {
+  machinery: {res:{copper:1, energy:1},      bits:200},
+  vehicle:   {res:{copper:1, energy:1},      bits:300},
+  composites:{res:{tungsten:1, plastics:1},  bits:400},
+  precision: {res:{gems:1, copper:1},        bits:400}
+};
+
+const UNIT_COST = {
+  Cavalry: {hire:200000, upkeep:{apples:5}},
+  Tanks:   {hire:300000, upkeep:{gasoline:5}},
+  Pegasi:  {hire:300000, upkeep:{coffee:5}},
+  Unicorns:{hire:400000, upkeep:{gems:5}},
+  Naval:   {hire:250000, upkeep:{gasoline:5}},
+  Alicorns:{hire:0,      upkeep:{}}          // no published price
+};
+
+const WEAPON_COST = {
+  ScroungedWeapons:   {bits:0,      res:{}},
+  "PRC-E6":           {bits:20000,  res:{copper:5}},
+  "PRC-E7":           {bits:30000,  res:{copper:5, tungsten:1}},
+  "PRC-E8":           {bits:40000,  res:{copper:8, machinery:1}},
+  ACFU:               {bits:50000,  res:{copper:10, machinery:1}},
+  APFU:               {bits:50000,  res:{copper:8, machinery:1, plastics:1}},
+  ATFU:               {bits:50000,  res:{copper:8, machinery:1, tungsten:1}},
+  AUFU:               {bits:50000,  res:{copper:8, machinery:1, precision:1}},
+  K9P:                {bits:50000,  res:{copper:15}},
+  "ELBO-GRS":         {bits:60000,  res:{copper:15, machinery:2}},
+  "Chem-LightBattery":{bits:70000,  res:{copper:15, precision:1}},
+  PropWash:           {bits:50000,  res:{copper:10, precision:1}},
+  SteamBucket:        {bits:60000,  res:{copper:10, precision:2}},
+  CanopyLights:       {bits:70000,  res:{copper:10, precision:3}},
+  LongStand:          {bits:80000,  res:{precision:5}},
+  LongWeight:         {bits:100000, res:{precision:10}},
+  GridSquares:        {bits:120000, res:{machinery:3, precision:10}},
+  Shoreline:          {bits:60000,  res:{copper:5, machinery:1}},
+  WaterHammer:        {bits:80000,  res:{copper:10, machinery:2}},
+  WaterlineEraser:    {bits:100000, res:{copper:15, machinery:3}}
+};
+
+const ARMOR_COST = {
+  ScroungedArmor:{bits:0,      res:{}},
+  Barding:       {bits:20000,  res:{copper:2}},
+  Bigdog:        {bits:30000,  res:{copper:4, tungsten:4}},
+  Nope:          {bits:40000,  res:{copper:8, composites:1}},
+  Trundle:       {bits:30000,  res:{copper:5, vehicle:1}},
+  Shepherd:      {bits:40000,  res:{copper:10, vehicle:1, composites:1}},
+  Ohno:          {bits:50000,  res:{copper:15, vehicle:1, plastics:1, composites:1}},
+  Titan:         {bits:70000,  res:{copper:20, vehicle:1, composites:2}},
+  Cooler:        {bits:30000,  res:{composites:2}},
+  Wonder:        {bits:40000,  res:{composites:4}},
+  Griffin:       {bits:60000,  res:{composites:6}},
+  Dragon:        {bits:80000,  res:{composites:8}},
+  Hornshield:    {bits:35000,  res:{precision:1, composites:2}},
+  Librarian:     {bits:50000,  res:{precision:1, composites:4}},
+  Shining:       {bits:70000,  res:{precision:2, composites:5}},
+  D2A:           {bits:80000,  res:{precision:3, composites:6}},
+  "C-PON3":      {bits:40000,  res:{copper:10, vehicle:2, composites:1}},
+  Esohes:        {bits:70000,  res:{copper:15, vehicle:2, composites:2}},
+  Shubidu:       {bits:100000, res:{copper:20, vehicle:2, composites:4}}
+};
+
+const gearCost = (kind, key) =>
+  (kind === "weapon" ? WEAPON_COST : ARMOR_COST)[key] || {bits:0, res:{}};
+
+const bits = n => money(n);
+
+function addRes(into, from, mult){
+  Object.entries(from || {}).forEach(([k,v])=>{ into[k] = (into[k]||0) + v*(mult ?? 1); });
+  return into;
+}
+
+/* replace crafted parts with what they are actually made of */
+function toRaw(res){
+  const out = {};
+  let craftBits = 0;
+  Object.entries(res).forEach(([k,v])=>{
+    const rec = CRAFT[k];
+    if (rec){ addRes(out, rec.res, v); craftBits += rec.bits * v; }
+    else out[k] = (out[k]||0) + v;
+  });
+  return {res: out, craftBits};
+}
+
+function resIcon(key){
+  const r = RESOURCES[key];
+  if (!r) return esc(key);
+  return `<img class="res-icon" src="${r.icon}" alt="${esc(r.name)}" title="${esc(r.name)}">`;
+}
+
+function resChips(res){
+  const keys = RES_ORDER.filter(k=>res[k]);
+  const extra = Object.keys(res).filter(k=>!RESOURCES[k] && res[k]);
+  if (!keys.length && !extra.length) return `<span class="res-none">none</span>`;
+  return keys.concat(extra).map(k=>
+    `<span class="res-chip">${resIcon(k)}<span class="mono">${res[k]}</span></span>`).join("");
+}
+
+/* ===================================================================
+   2. SPRITES
+   Same filename scheme overview.php uses:
+   images/{lowertype}/w-{armor_id}-{weapon_id}.png
+   Scrounged gear is id 0 on both axes, so unequipped units land on w-0-0.png.
+   Anything that 404s is replaced with a question mark.
+   =================================================================== */
+const IMG_BASE = "https://4clop.org/images/";
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+function spritePath(type, weapon, armor){
+  return `${IMG_BASE}${type.toLowerCase()}/w-${ARMOR_IDS[armor]}-${WEAPON_IDS[weapon]}.png`;
+}
+
+function buildSprite(type, weapon, armor, big, meta){
+  const tip = typeof tipAttrs === "function"
+    ? tipAttrs(type, weapon, armor, meta?.size, meta?.training) : "";
+  return `<img class="sprite${big ? " sprite-lg" : ""}" src="${esc(spritePath(type, weapon, armor))}"
+    alt="${esc(type)} — ${esc(label(weapon))} / ${esc(label(armor))}" loading="lazy"
+    ${tip} onerror="this.replaceWith(spriteMissing(this))">`;
+}
+
+function spriteMissing(img){
+  const span = document.createElement("span");
+  span.className = "sprite sprite-missing" + (img.classList.contains("sprite-lg") ? " sprite-lg" : "");
+  span.textContent = "?";
+  Object.entries(img.dataset).forEach(([k, v])=>{ span.dataset[k] = v; });
+  return span;
+}
+
+/* ===================================================================
+   3. ROW MANAGEMENT
+   =================================================================== */
+
+let rowSeq = 0;
+
+function makeRow(side, data){
+  const tr = document.createElement("tr");
+  tr.dataset.side = side;
+  tr.dataset.id = ++rowSeq;
+
+  const typeOpts = (side === "defender"
+    ? ["Cavalry","Tanks","Pegasi","Unicorns","Naval","Alicorns"]
+    : ["Cavalry","Tanks","Pegasi","Unicorns","Naval"]);
+
+  tr.innerHTML = `
+    <td class="col-sprite"><span class="spriteSlot"></span></td>
+    <td class="col-type"><select class="type">
+      ${typeOpts.map(t=>`<option value="${t}">${t}</option>`).join("")}
+    </select></td>
+    <td class="col-weapon"><select class="weapon"><option value="">—</option></select></td>
+    <td class="col-armor"><select class="armor"><option value="">—</option></select></td>
+    <td class="col-size"><input type="number" class="size" min="1" value="${data?.size ?? 1}"></td>
+    <td class="col-train"><input type="number" class="training" min="0" max="20" value="${data?.training ?? 0}"></td>
+    <td class="col-del"><button class="btn btn-danger btn-xs del" title="Remove unit">×</button></td>`;
+
+  const typeSel = tr.querySelector(".type");
+  const wSel = tr.querySelector(".weapon");
+  const aSel = tr.querySelector(".armor");
+
+  typeSel.addEventListener("change", ()=>{ fillLoadout(typeSel.value, wSel, aSel); paintRow(tr); });
+  wSel.addEventListener("change", ()=>paintRow(tr));
+  aSel.addEventListener("change", ()=>paintRow(tr));
+  tr.querySelector(".training").addEventListener("input", ()=>paintRow(tr));
+  tr.querySelector(".size").addEventListener("input", ()=>paintRow(tr));
+  tr.querySelector(".del").addEventListener("click", ()=>{ tr.remove(); refreshCounts(); });
+
+  document.getElementById(side === "attacker" ? "tbodyAttacker" : "tbodyDefender").appendChild(tr);
+
+  typeSel.value = (data && data.type) || "Cavalry";
+  fillLoadout(typeSel.value, wSel, aSel);
+  wSel.value = (data && data.weapon) || "ScroungedWeapons";
+  aSel.value = (data && data.armor)  || "ScroungedArmor";
+  if (!wSel.value) wSel.selectedIndex = 0;
+  if (!aSel.value) aSel.selectedIndex = 0;
+  paintRow(tr);
+  refreshCounts();
+  return tr;
+}
+
+function fillLoadout(type, wSel, aSel){
+  wSel.innerHTML = ""; aSel.innerHTML = "";
+  const set = LOADOUTS[type];
+  if (!set){
+    wSel.innerHTML = '<option value="">—</option>';
+    aSel.innerHTML = '<option value="">—</option>';
+    return;
+  }
+  set.weapons.forEach(w=>wSel.add(new Option(label(w), w)));
+  set.armor.forEach(a=>aSel.add(new Option(label(a), a)));
+}
+
+function paintRow(tr){
+  const type = tr.querySelector(".type").value;
+  const weapon = tr.querySelector(".weapon").value || "ScroungedWeapons";
+  const armor = tr.querySelector(".armor").value || "ScroungedArmor";
+  const training = tr.querySelector(".training").value;
+  const size = tr.querySelector(".size").value;
+  const slot = tr.querySelector(".spriteSlot");
+
+  // keep the same <img> when only size/training moved — avoids a sprite reload
+  const cur = slot.querySelector("[data-tip-t]");
+  if (type && cur && cur.dataset.tipT === type && cur.dataset.tipW === weapon && cur.dataset.tipA === armor){
+    cur.dataset.tipSize = size;
+    cur.dataset.tipTrain = training;
+  } else {
+    slot.innerHTML = type
+      ? buildSprite(type, weapon, armor, false, {size, training})
+      : `<span class="muted small">—</span>`;
+  }
+  refreshCosts();
+}
+
+function refreshCounts(){
+  document.getElementById("atkCount").textContent =
+    document.querySelectorAll("#tbodyAttacker tr").length + " units";
+  document.getElementById("defCount").textContent =
+    document.querySelectorAll("#tbodyDefender tr").length + " units";
+  refreshCosts();
+}
+
+/* ===================================================================
+   3b. COST SUMMARY per side
+   =================================================================== */
+
+/* tooltips whose body is arbitrary html live in this registry, keyed by
+   data-tip-key, so we never have to shove markup through an attribute */
+const TIPS = new Map();
+let tipSeq = 0;
+function regTip(html, ns){
+  const k = (ns || "k") + (++tipSeq);
+  TIPS.set(k, html);
+  return k;
+}
+function clearTips(ns){
+  [...TIPS.keys()].forEach(k=>{ if (k.startsWith(ns)) TIPS.delete(k); });
+}
+
+function sideCosts(side){
+  const rows = readSide(side);
+  let hire = 0, gearBits = 0;
+  const upkeep = {}, gearRes = {};
+  const items = [];
+
+  rows.forEach(u=>{
+    const n = Math.max(0, u.size);            // every cost is per troop
+    const uc = UNIT_COST[u.type] || {hire:0, upkeep:{}};
+    hire += uc.hire * n;
+    addRes(upkeep, uc.upkeep, n);
+
+    const w = gearCost("weapon", u.weapon), a = gearCost("armor", u.armor);
+    const gb = (w.bits + a.bits) * n;
+    gearBits += gb;
+    addRes(gearRes, w.res, n); addRes(gearRes, a.res, n);
+
+    items.push({u, n, w, a,
+      res: addRes(addRes({}, w.res, n), a.res, n),
+      gbits: gb,
+      hire: uc.hire * n,
+      upkeep: addRes({}, uc.upkeep, n)});
+  });
+
+  const raw = toRaw(gearRes);
+  return {rows, items, hire, upkeep, gearBits, gearRes,
+          rawRes: raw.res, craftBits: raw.craftBits};
+}
+
+function breakdownTip(title, items, cell, countFmt){
+  if (!items.length) return `<div class="tip-title">${esc(title)}</div>
+    <div class="small muted" style="margin-top:4px">No units yet.</div>`;
+  const count = countFmt || (it=>"×" + it.n);
+  const rows = items.map(it=>`<tr>
+      <td class="u">${esc(it.u.type)} <span class="muted mono">${count(it)}</span>
+        <div class="small muted">${esc(label(it.u.weapon))} / ${esc(label(it.u.armor))}</div></td>
+      <td style="text-align:right">${cell(it)}</td></tr>`).join("");
+  return `<div class="tip-title">${esc(title)}</div>
+    <table class="tip-break" style="margin-top:6px">${rows}</table>`;
+}
+
+function renderCosts(side){
+  const el = document.getElementById(side === "attacker" ? "costAttacker" : "costDefender");
+  if (!el) return;
+  const c = sideCosts(side);
+
+  const hireTipKey = regTip(breakdownTip("Raise army — money cost", c.items, it=>
+    `<span class="bits">${money(it.hire)}</span>`
+  ) + `<div class="tip-cost">Total <span class="bits">${money(c.hire)}</span></div>`, "cost");
+
+  const upkeepTipKey = regTip(breakdownTip("Upkeep — per 12 hours", c.items,
+    it=>resChips(it.upkeep)), "cost");
+
+  const gearTipKey = regTip(breakdownTip("Equipment — money cost", c.items, it=>
+    `<span class="bits">${money(it.gbits)}</span>` +
+    `<div class="small muted mono">${esc(label(it.u.weapon))} ${money(it.w.bits * it.n)} · ${esc(label(it.u.armor))} ${money(it.a.bits * it.n)}</div>`
+  ) + `<div class="tip-cost">Total <span class="bits">${money(c.gearBits)}</span></div>`, "cost");
+
+  const resTipKey = regTip(breakdownTip("Equipment — resource cost", c.items, it=>resChips(it.res)), "cost");
+
+  const rawTipKey = regTip(breakdownTip("Equipment — raw resource cost", c.items, it=>{
+    const r = toRaw(it.res);
+    return resChips(r.res) + (r.craftBits
+      ? `<div class="small muted mono">+ ${money(r.craftBits)} crafting</div>` : "");
+  }) + `<div class="tip-cost">Crafting fees <span class="bits">${money(c.craftBits)}</span></div>`, "cost");
+
+  const hasUnits = c.rows.length > 0;
+  const tip = k => hasUnits ? ` class="cost-row has-tip" data-tip-key="${k}"` : ` class="cost-row"`;
+  const prevMain = el.querySelector("details.cost-drop");
+  const prevRaw  = el.querySelector("details.res-drop");
+  const openMain = prevMain ? prevMain.open : false;
+  const openRaw  = prevRaw  ? prevRaw.open  : false;
+
+  el.innerHTML = `
+    <details class="cost-drop"${openMain ? " open" : ""}>
+      <summary>Costs</summary>
+      <div class="cost-body">
+        <div${tip(hireTipKey)}>
+          <span class="cost-label">Raise army</span>
+          <span class="cost-val bits">${money(c.hire)}</span>
+        </div>
+        <div${tip(upkeepTipKey)}>
+          <span class="cost-label">Upkeep / 12 h</span>
+          <span class="cost-val">${resChips(c.upkeep)}</span>
+        </div>
+        <div${tip(gearTipKey)}>
+          <span class="cost-label">Equipment ${BIT}</span>
+          <span class="cost-val bits">${money(c.gearBits)}</span>
+        </div>
+        ${resourceBlock({
+          res: c.gearRes, rawRes: c.rawRes, craftBits: c.craftBits,
+          resKey: hasUnits ? resTipKey : null, rawKey: hasUnits ? rawTipKey : null,
+          open: openRaw,
+          extra: `<div class="cost-row"><span class="cost-label">equipment all-in</span>
+                    <span class="cost-val bits">${money(c.gearBits + c.craftBits)}</span></div>`
+        })}
+        <div class="cost-row" style="margin-top:6px;padding-top:7px;border-top:1px solid rgba(0,0,0,.35)">
+          <span class="cost-label" style="color:var(--text)">Total up front</span>
+          <span class="cost-val bits" style="font-size:13px">${money(c.hire + c.gearBits + c.craftBits)}</span>
+        </div>
+      </div>
+    </details>`;
+}
+
+/* the Resources row is itself the toggle for the raw breakdown */
+function resourceBlock(o){
+  return `<details class="res-drop"${o.open ? " open" : ""}>
+      <summary${o.resKey ? ` class="cost-row has-tip" data-tip-key="${o.resKey}"` : ` class="cost-row"`}>
+        <span class="cost-label">Resources <span class="caret">▸</span></span>
+        <span class="cost-val">${resChips(o.res)}</span>
+      </summary>
+      <div class="raw-body">
+        <div${o.rawKey ? ` class="cost-row has-tip" data-tip-key="${o.rawKey}"` : ` class="cost-row"`}>
+          <span class="cost-label">raw</span>
+          <span class="cost-val">${resChips(o.rawRes)}</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">crafting fees</span>
+          <span class="cost-val bits">${money(o.craftBits)}</span>
+        </div>
+        ${o.extra || ""}
+      </div>
+    </details>`;
+}
+
+function refreshCosts(){
+  clearTips("cost");
+  scheduleSave();
+  renderCosts("attacker");
+  renderCosts("defender");
+}
+
+function readSide(side){
+  const rows = document.querySelectorAll(`#tbody${side === "attacker" ? "Attacker" : "Defender"} tr`);
+  const out = [];
+  rows.forEach(tr=>{
+    const type = tr.querySelector(".type").value;
+    if (!type) return;
+    const weapon = tr.querySelector(".weapon").value || "ScroungedWeapons";
+    const armor = tr.querySelector(".armor").value || "ScroungedArmor";
+    const size = parseInt(tr.querySelector(".size").value,10) || 0;
+    const training = parseInt(tr.querySelector(".training").value,10) || 0;
+    out.push({type, weapon, armor, size, training,
+      name:`${type}_${weapon}_${armor}_size_${size}_train_${training}`});
+  });
+  return out;
+}
+
+/* ===================================================================
+   4. SIMULATION — direct port of huge-ovipositor-backend.php
+   =================================================================== */
+
+function buildUnit(raw, forceId, isInvader){
+  const u = {
+    force_id: forceId,
+    name: (isInvader ? "A_" : "D_") + raw.name,
+    size: raw.size,
+    training: raw.training,
+    type: FORCE_TYPES[raw.type],
+    origType: raw.type,          // kept because alicorns get retyped to Naval below
+    weapon: raw.weapon,
+    armor: raw.armor,
+    weapon_id: WEAPON_IDS[raw.weapon],
+    armor_id: ARMOR_IDS[raw.armor],
+    attack_mission: isInvader ? 1 : 0,
+    nation_id: isInvader ? 1 : 2,
+    damage: 0,
+    hits: raw.size,
+    dmg: {}, arm: {}
+  };
+
+  const wd = WEAPON_DEFS[raw.weapon];
+  const ad = ARMOR_DEFS[raw.armor];
+
+  if (u.type === 6){                       // alicorns
+    u.type = 5;                            // "treat them like naval for now"
+    TYPE_NUMS.forEach(n=>{ u.dmg[TYPES[n]] = 10; u.arm[TYPES[n]] = 0.1; });
+  } else {
+    TYPE_NUMS.forEach(n=>{
+      const t = TYPES[n];
+      // PHP: !$rs['weapon_id'] — id 0 (Scrounged) is falsy, so it takes the fallback
+      u.dmg[t] = (!u.weapon_id || !wd) ? 0.25 : Number(wd[t]);
+      u.arm[t] = (!u.armor_id  || !ad) ? 1    : Number(ad[t]);
+    });
+  }
+  return u;
+}
+
+// array_multisort helper: stable sort of parallel arrays by key list
+function multisort(items, keys){
+  return items.map((v,i)=>({v,i}))
+    .sort((a,b)=>{
+      for (const k of keys){
+        const d = k.cmp(k.get(a.v), k.get(b.v));
+        if (d) return d;
+      }
+      return a.i - b.i;
+    })
+    .map(x=>x.v);
+}
+const ASC  = (x,y)=> x<y ? -1 : x>y ? 1 : 0;
+const DESC = (x,y)=> x<y ?  1 : x>y ? -1 : 0;
+
+function simulate(attackers, defenders, defenderBonus){
+  const units = {};
+  const invaders = [], repellers = [];
+  let fid = 0;
+
+  attackers.forEach(r=>{ const u = buildUnit(r, ++fid, true);  units[u.force_id]=u; invaders.push(u); });
+  defenders.forEach(r=>{ const u = buildUnit(r, ++fid, false); units[u.force_id]=u; repellers.push(u); });
+
+  // --- damage buckets: [damageValue][targetTypeName] = [units]
+  function damageBuckets(side){
+    const b = {};
+    side.forEach(u=>{
+      TYPE_NUMS.forEach(n=>{
+        const t = TYPES[n];
+        const key = String(u.dmg[t]);
+        (b[key] ??= {});
+        (b[key][t] ??= []).push(u);
+      });
+    });
+    // krsort numerically (highest damage first)
+    const sortedKeys = Object.keys(b).sort((a,c)=>parseFloat(c)-parseFloat(a));
+    const out = [];
+    sortedKeys.forEach(k=>{
+      const byType = {};
+      TYPE_NUMS.forEach(n=>{
+        const t = TYPES[n];
+        if (b[k][t]) byType[t] = multisort(b[k][t], [
+          {get:u=>u.size,       cmp:DESC},
+          {get:u=>u.nation_id,  cmp:ASC}
+        ]);
+      });
+      out.push({damage: parseFloat(k), byType});
+    });
+    return out;
+  }
+
+  // --- defender pools: [defenderOwnType][attackerType] = [units], sorted by armor asc
+  function defenderPools(side){
+    const p = {};
+    side.forEach(u=>{
+      TYPE_NUMS.forEach(n=>{
+        (p[u.type] ??= {});
+        (p[u.type][n] ??= []).push(u);
+      });
+    });
+    Object.keys(p).forEach(dt=>{
+      TYPE_NUMS.forEach(n=>{
+        if (p[dt][n]) p[dt][n] = multisort(p[dt][n], [
+          {get:u=>u.arm[TYPES[n]], cmp:ASC},
+          {get:u=>u.size,          cmp:DESC},
+          {get:u=>u.nation_id,     cmp:ASC}
+        ]);
+      });
+    });
+    return p;
+  }
+
+  const invaderDamages   = damageBuckets(invaders);
+  const repellerDamages  = damageBuckets(repellers);
+  const invaderDefenders = defenderPools(invaders);
+  const repellerDefenders= defenderPools(repellers);
+
+  const hitinfo = {}, damageinfo = {};
+  // PHP arrays keep insertion order; JS objects with numeric keys re-sort
+  // ascending, which would scramble the exchange log. Track order separately.
+  const hitOrder = [];
+  const stalls = [];
+  let budget = 4_000_000;   // guard: PHP would hang here on a 0-damage matchup
+
+  function runSide(buckets, enemyPools, applyBonus){
+    for (const bucket of buckets){
+      for (const tn of TYPE_NUMS){
+        const t = TYPES[tn];
+        const attackerList = bucket.byType[t];
+        if (!attackerList) continue;
+
+        let breakTypeLoop = false;
+        for (const attacker of attackerList){
+          const A = units[attacker.force_id];
+          while (A.hits > 0){
+            let fought = false;
+            const pool = enemyPools[tn]?.[A.type];
+            if (!pool || !pool.length) break;
+
+            let outOfHits = false;
+            for (const defender of pool){
+              const D = units[defender.force_id];
+              let dmg = round3(bucket.damage * D.arm[TYPES[A.type]]
+                        * Math.pow(1.5, (A.training - D.training)/20));
+              if (applyBonus) dmg = dmg * 0.75;
+
+              if (dmg <= 0){
+                // PHP would spin forever here; record and skip.
+                stalls.push(`${A.name} does 0 damage to ${D.name} — skipped`);
+                continue;
+              }
+
+              while (D.size > D.damage){
+                fought = true;
+                D.damage += dmg;
+                hitinfo[A.force_id] ??= {}; damageinfo[A.force_id] ??= {};
+                if (!(D.force_id in hitinfo[A.force_id])) hitOrder.push([A.force_id, D.force_id]);
+                hitinfo[A.force_id][D.force_id] = (hitinfo[A.force_id][D.force_id]||0) + 1;
+                damageinfo[A.force_id][D.force_id] = (damageinfo[A.force_id][D.force_id]||0) + dmg;
+                A.hits--;
+                if (--budget <= 0) throw new Error("Iteration limit reached — check for zero or near-zero damage values.");
+                if (A.hits === 0){ outOfHits = true; break; }
+              }
+              if (outOfHits) break;
+            }
+            if (outOfHits) break;          // PHP: break 2 -> exits while(hits)
+            if (!fought){ breakTypeLoop = true; break; }  // PHP: break 2 -> next type
+          }
+          if (breakTypeLoop) break;
+        }
+      }
+    }
+  }
+
+  if (repellers.length){
+    runSide(invaderDamages,  repellerDefenders, defenderBonus === "Yes");
+    runSide(repellerDamages, invaderDefenders,  false);
+  }
+
+  // --- apply casualties
+  const log = [];
+  for (const [aid, did] of hitOrder){
+    log.push({aid, did, damage: round6(damageinfo[aid][did]), hits: hitinfo[aid][did]});
+  }
+
+  const casualties = [];
+  Object.values(units).forEach(u=>{
+    const dealt = Math.floor(round6(u.damage));
+    u.lost = 0; u.dead = false;
+    if (dealt > 0){
+      if (dealt < u.size){ u.lost = dealt; u.remaining = u.size - dealt;
+        casualties.push({kind:"hurt", uid:u.force_id, lost:dealt}); }
+      else { u.lost = u.size; u.remaining = 0; u.dead = true;
+        casualties.push({kind:"kill", uid:u.force_id}); }
+    } else { u.remaining = u.size; }
+  });
+
+  return {units, invaders, repellers, log, casualties, stalls};
+}
+
+const round3 = n => Math.round((n + Number.EPSILON) * 1000) / 1000;
+const round6 = n => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+
+/* ===================================================================
+   5. RESULTS RENDERING
+   =================================================================== */
+
+const fmt = n => Number.isInteger(n) ? String(n) : String(round3(n));
+
+// What the unit actually fights with, after the alicorn override and the
+// id-0 scrounged fallbacks. Mirrors buildUnit().
+function effectiveStats(type, weapon, armor){
+  const dmg = {}, arm = {};
+  if (type === "Alicorns"){
+    TYPE_NUMS.forEach(n=>{ dmg[TYPES[n]] = 10; arm[TYPES[n]] = 0.1; });
+  } else {
+    const wd = WEAPON_DEFS[weapon], ad = ARMOR_DEFS[armor];
+    TYPE_NUMS.forEach(n=>{
+      const t = TYPES[n];
+      dmg[t] = (!WEAPON_IDS[weapon] || !wd) ? 0.25 : Number(wd[t]);
+      arm[t] = (!ARMOR_IDS[armor]  || !ad) ? 1    : Number(ad[t]);
+    });
+  }
+  return {dmg, arm};
+}
+
+function tipHTML(type, weapon, armor, size, training){
+  const {dmg, arm} = effectiveStats(type, weapon, armor);
+  const rows = TYPE_NUMS.map(n=>{
+    const t = TYPES[n];
+    return `<tr><td>${t.charAt(0).toUpperCase()+t.slice(1)}</td>
+      <td class="mono" style="text-align:right;color:#f17a77">${fmt(dmg[t])}</td>
+      <td class="mono" style="text-align:right;color:#74cae3">${fmt(arm[t])}</td></tr>`;
+  }).join("");
+  const w = gearCost("weapon", weapon), a = gearCost("armor", armor);
+  const n = (size != null && size !== "") ? Math.max(0, parseInt(size, 10) || 0) : 1;
+  const gres = addRes(addRes({}, w.res, n), a.res, n);
+  const uc = UNIT_COST[type] || {hire:0, upkeep:{}};
+
+  const upkeep = addRes({}, uc.upkeep, n);
+  const hasUpkeep = Object.keys(upkeep).some(k=>upkeep[k]);
+
+  return `<div class="tip-head">
+      <div>
+        ${buildSprite(type, weapon, armor, false)}
+        ${hasUpkeep ? `<div class="tip-upkeep" title="Upkeep per 12 hours">${resChips(upkeep)}</div>` : ""}
+      </div>
+      <div>
+        <div class="tip-title">${esc(type)}</div>
+        ${size != null
+          ? `<div class="small mono muted">size ${esc(size)} \u00b7 training ${esc(training)}</div>`
+          : ""}
+        ${type === "Alicorns"
+          ? `<div class="small muted">no price data</div>`
+          : `<div class="small mono">${money(uc.hire * n)}</div>`}
+      </div>
+    </div>
+    <table class="tip-table">
+      <thead><tr>
+        <th>vs</th>
+        <th style="text-align:right;color:#f17a77">${esc(label(weapon))}</th>
+        <th style="text-align:right;color:#74cae3">${esc(label(armor))}</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="tip-cost">
+      <div>Equipment <span class="bits">${money((w.bits + a.bits) * n)}</span></div>
+      <div style="margin-top:4px">${resChips(gres)}</div>
+    </div>`;
+}
+
+function tipAttrs(type, weapon, armor, size, training){
+  return `data-tip-t="${esc(type)}" data-tip-w="${esc(weapon)}" data-tip-a="${esc(armor)}"` +
+         (size != null ? ` data-tip-size="${esc(size)}" data-tip-train="${esc(training)}"` : "");
+}
+
+function unitRef(u){
+  return `<span class="unit-ref ${u.attack_mission ? "ref-atk" : "ref-def"}"
+    ${tipAttrs(u.origType, u.weapon, u.armor, u.size, u.training)}>${esc(u.name)}</span>`;
+}
+
+/* ---- hover math for a single exchange-log damage figure ---- */
+function dmgMathTip(A, D, l, bonusApplied){
+  const vsDef = TYPES[D.type];        // what the attacker's weapon rates against
+  const vsAtk = TYPES[A.type];        // what the defender's armor rates against
+  const base = A.dmg[vsDef];
+  const armv = D.arm[vsAtk];
+  const tExp = (A.training - D.training) / 20;
+  const tMul = Math.pow(1.5, tExp);
+  const rounded = round3(base * armv * tMul);
+  const perHit = bonusApplied ? rounded * 0.75 : rounded;
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+
+  return `<div class="tip-title">Damage breakdown</div>
+    <table class="tip-math" style="margin-top:6px">
+      <tr><td><span style="color:#f17a77">${esc(label(A.weapon))}</span>
+              <span class="muted">vs ${cap(vsDef)}</span></td>
+          <td class="n" style="color:#f17a77">${fmt(base)}</td></tr>
+      <tr><td><span style="color:#74cae3">${esc(label(D.armor))}</span>
+              <span class="muted">vs ${cap(vsAtk)}</span></td>
+          <td class="n" style="color:#74cae3">×${fmt(armv)}</td></tr>
+      <tr><td>training <span class="muted">${A.training} vs ${D.training}</span></td>
+          <td class="n">×${fmt(round3(tMul))}</td></tr>
+      ${bonusApplied ? `<tr><td>defender bonus</td><td class="n">×0.75</td></tr>` : ""}
+      <tr class="tot"><td>per hit</td><td class="n">${fmt(perHit)}</td></tr>
+      <tr><td class="muted">× ${l.hits} hit${l.hits === 1 ? "" : "s"}</td>
+          <td class="n">${fmt(l.damage)}</td></tr>
+    </table>
+`;
+}
+
+/* ---- what a side lost, in money and materiel ---- */
+function deathCosts(units, isAtk){
+  const items = [];
+  let troops = 0, hire = 0, gear = 0;
+  const res = {};
+  Object.values(units).forEach(u=>{
+    if ((!!u.attack_mission) !== isAtk) return;
+    const n = u.lost || 0;
+    if (!n) return;
+    const uc = UNIT_COST[u.origType] || {hire:0, upkeep:{}};
+    const w = gearCost("weapon", u.weapon), a = gearCost("armor", u.armor);
+    const r = addRes(addRes({}, w.res, n), a.res, n);
+    troops += n; hire += uc.hire * n; gear += (w.bits + a.bits) * n;
+    addRes(res, r);
+    items.push({u:{type:u.origType, weapon:u.weapon, armor:u.armor}, n,
+                hire: uc.hire * n, gear: (w.bits + a.bits) * n, res:r,
+                dead: u.dead, of: u.size});
+  });
+  const raw = toRaw(res);
+  return {items, troops, hire, gear, res, rawRes:raw.res, craftBits:raw.craftBits};
+}
+
+const lostCount = it => `${it.n} lost${it.dead ? " (wiped)" : " / " + it.of}`;
+
+function deathsColumn(title, cls, d){
+  if (!d.troops) return `<div>
+      <div class="small" style="margin-bottom:6px"><span class="badge ${cls}">${title}</span></div>
+      <div class="well"><span class="muted small">Nothing lost.</span></div>
+    </div>`;
+
+  const moneyKey = regTip(breakdownTip(title + " — money lost", d.items, it=>
+    `<span class="bits">${money(it.hire + it.gear)}</span>
+     <div class="small muted mono">raise ${money(it.hire)} · equipment ${money(it.gear)}</div>`,
+    lostCount) + `<div class="tip-cost">Total <span class="bits">${money(d.hire + d.gear)}</span></div>`, "death");
+
+  const resKey = regTip(breakdownTip(title + " — resources lost", d.items,
+    it=>resChips(it.res), lostCount), "death");
+
+  const rawKey = regTip(breakdownTip(title + " — raw resources lost", d.items, it=>{
+    const r = toRaw(it.res);
+    return resChips(r.res) + (r.craftBits
+      ? `<div class="small muted mono">+ ${money(r.craftBits)} crafting</div>` : "");
+  }, lostCount) + `<div class="tip-cost">Crafting fees <span class="bits">${money(d.craftBits)}</span></div>`, "death");
+
+  return `<div>
+    <div class="small" style="margin-bottom:6px">
+      <span class="badge ${cls}">${title}</span>
+      <span class="muted" style="margin-left:6px">${d.troops} troop${d.troops === 1 ? "" : "s"} lost</span>
+    </div>
+    <div class="well">
+      <div class="cost-row has-tip" data-tip-key="${moneyKey}">
+        <span class="cost-label">Raise value</span>
+        <span class="cost-val bits">${money(d.hire)}</span></div>
+      <div class="cost-row has-tip" data-tip-key="${moneyKey}">
+        <span class="cost-label">Equipment ${BIT}</span>
+        <span class="cost-val bits">${money(d.gear)}</span></div>
+      ${resourceBlock({res:d.res, rawRes:d.rawRes, craftBits:d.craftBits,
+                       resKey:resKey, rawKey:rawKey, open:false})}
+      <div class="cost-row" style="margin-top:6px;padding-top:7px;border-top:1px solid rgba(0,0,0,.35)">
+        <span class="cost-label" style="color:var(--text)">Total burned</span>
+        <span class="cost-val bits" style="font-size:13px">${money(d.hire + d.gear + d.craftBits)}</span></div>
+    </div>
+  </div>`;
+}
+
+function render(result, atkRaw, defRaw, bonus){
+  const {units, log, casualties, stalls} = result;
+  const all = Object.values(units);
+  const sum = (f, inv) => all.filter(u=>!!u.attack_mission === inv).reduce((a,u)=>a+f(u), 0);
+  const atkTotal = sum(u=>u.size, true),  atkLeft = sum(u=>u.remaining, true);
+  const defTotal = sum(u=>u.size, false), defLeft = sum(u=>u.remaining, false);
+
+  clearTips("death");
+  const atkDead = deathCosts(units, true), defDead = deathCosts(units, false);
+
+  const el = document.getElementById("results");
+  el.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Battle result</h2>
+        <span class="badge">Defender bonus: ${bonus}</span>
+        <span class="spacer"></span>
+        <span class="badge badge-danger">Attackers <b>${atkLeft}</b> / ${atkTotal}</span>
+        <span class="badge badge-info">Defenders <b>${defLeft}</b> / ${defTotal}</span>
+      </div>
+
+      ${stalls.length ? `<div class="note warn"><strong>${stalls.length} matchup(s) did nothing</strong> —
+        a damage value resolved to zero. The PHP would loop forever here; this build skips them.</div>` : ""}
+
+      <div>
+        <div>
+          <h3>Exchange log</h3>
+          <div class="well log">${
+            log.length ? log.map(l=>{
+              const A = units[l.aid], D = units[l.did];
+              const bonusApplied = !!A.attack_mission && bonus === "Yes";
+              const mk = regTip(dmgMathTip(A, D, l, bonusApplied), "death");
+              return `<div>${unitRef(A)} <span class="muted">(size <b>${A.size}</b>)</span> hit
+                ${unitRef(D)} <span class="muted">(size <b>${D.size}</b>)</span>
+                for <b class="dmg-ref" data-tip-key="${mk}">${fmt(l.damage)}</b> damage
+                <span class="muted">(<b>${l.hits}</b> hits)</span></div>`;
+            }).join("") : '<div class="muted">No hits were exchanged.</div>'}</div>
+        </div>
+        <div style="margin-top:14px">
+          <h3>Casualties</h3>
+          <div class="well log">${
+            casualties.length ? casualties.map(c=>{
+              const u = units[c.uid];
+              return c.kind === "kill"
+                ? `<div>${unitRef(u)} <span class="kill">IS KILL</span></div>`
+                : `<div>${unitRef(u)} <span class="hurt">lost <b>${c.lost}</b> size!</span></div>`;
+            }).join("") : '<div class="muted">Everyone walked away.</div>'}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Survivors</h2></div>
+      <div class="grid2">
+        ${[["Attackers", true, "surv-atk"], ["Defenders", false, "surv-def"]].map(([hd, inv, cls])=>{
+          const side = all.filter(u=>!!u.attack_mission === inv);
+          return `<div class="surv-col">
+            <h3>${hd}</h3>
+            <div class="surv-grid">${
+              side.length ? side.map(u=>`<div class="surv-card ${cls}${u.dead ? " surv-dead" : ""}">
+                  ${buildSprite(u.origType, u.weapon, u.armor, true, {size:u.size, training:u.training})}
+                  <div class="small mono" style="margin-top:7px;word-break:break-all;color:var(--text-dim)">${esc(label(u.weapon))} / ${esc(label(u.armor))}</div>
+                  <div class="mono" style="margin-top:4px;font-size:15px;${u.dead?'color:#f17a77':''}">
+                    ${u.dead ? "DESTROYED" : `<b>${u.remaining}</b> <span class="muted small">/ ${u.size}</span>`}
+                  </div>
+                </div>`).join("") : '<div class="muted small">None fielded.</div>'}</div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Deaths</h2>
+        <span class="spacer"></span>
+        <span class="badge badge-danger">Attackers −${money(atkDead.hire + atkDead.gear + atkDead.craftBits)}</span>
+        <span class="badge badge-info">Defenders −${money(defDead.hire + defDead.gear + defDead.craftBits)}</span>
+      </div>
+      <div class="grid2">
+        ${deathsColumn("Attackers", "badge-danger", atkDead)}
+        ${deathsColumn("Defenders", "badge-info", defDead)}
+      </div>
+    </div>`;
+  el.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+/* ===================================================================
+   6. IMPORT (same parser as the original page)
+   =================================================================== */
+
+function importRows(side){
+  const ta = document.getElementById("txtImport");
+  const text = ta.value;
+  if (!text.trim()) return;
+  const clean = s => String(s).trim().split(" ").join("");
+  try{
+    const lines = text.split(/\r?\n|\r/);
+    let added = 0;
+    for (let i = 0; i < lines.length; i++){
+      if (i >= 4 && lines[i].indexOf("Training:") === 0){
+        let unit;
+        if (lines[i-2].trim() !== "Alicorns"){
+          unit = {type: clean(lines[i-4]), weapon: clean(lines[i-3]), armor: clean(lines[i-2]),
+                  size: parseInt(lines[i-1].split(":")[1].trim(),10),
+                  training: parseInt(lines[i].split(":")[1].trim(),10)};
+        } else {
+          unit = {type:"Alicorns", weapon:"ScroungedWeapons", armor:"ScroungedArmor",
+                  size: parseInt(lines[i-1].split(":")[1].trim(),10),
+                  training: parseInt(lines[i].split(":")[1].trim(),10)};
+        }
+        if (side === "attacker" && unit.type === "Alicorns"){
+          alert("Alicorns can only be fielded as defenders — skipping that entry.");
+          continue;
+        }
+        makeRow(side, unit); added++;
+      }
+    }
+    if (!added){ alert("Nothing matched the expected format. Each unit block must end with a Training: line."); return; }
+    ta.value = "";
+  } catch(e){
+    console.error(e);
+    alert("The import data was in an unexpected format.");
+  }
+}
+
+/* ===================================================================
+   6b. STORAGE — autosave, army presets, battle presets
+   =================================================================== */
+
+const LS_KEY  = "warcalc.autosave";
+const LS_ARMY = "warcalc.armyPresets";
+const LS_BATL = "warcalc.battlePresets";
+
+let storageOK = true;
+const store = {
+  get(key, fallback){
+    try{
+      const v = localStorage.getItem(key);
+      return v == null ? fallback : JSON.parse(v);
+    }catch(e){ storageOK = false; return fallback; }
+  },
+  set(key, value){
+    try{ localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch(e){ storageOK = false; return false; }
+  },
+  del(key){ try{ localStorage.removeItem(key); }catch(e){} }
+};
+
+/* a unit stripped down to what is worth saving */
+const packSide = side => readSide(side).map(u=>({
+  type:u.type, weapon:u.weapon, armor:u.armor, size:u.size, training:u.training}));
+
+function setSide(side, units){
+  document.getElementById(side === "attacker" ? "tbodyAttacker" : "tbodyDefender").innerHTML = "";
+  (units || []).forEach(u=>{
+    if (side === "attacker" && u.type === "Alicorns") return;   // attackers can't field them
+    makeRow(side, u);
+  });
+  refreshCounts();
+}
+
+/* ---- preload from the URL fragment ----------------------------------
+   bonziPONY hands a battle over by opening this file with #w=<base64url JSON>:
+     {"attackers":[{type,weapon,armor,size,training},...],"defenders":[...],
+      "bonus":true,"title":"Rustlung (#47), as she read them"}
+   The fragment never leaves the browser -- it is not sent anywhere even when this
+   page is served over http, and over file:// there is nothing to send it to.
+   Everything below reuses setSide(), so a handed-over battle is built exactly the
+   way loading a saved one is. */
+
+function b64urlToText(raw){
+  const b64 = raw.replace(/-/g, "+").replace(/_/g, "/")
+                 .padEnd(raw.length + (4 - raw.length % 4) % 4, "=");
+  const bin = atob(b64);
+  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+
+function showHandoverBanner(text, warn){
+  const old = document.getElementById("handoverNote");
+  if (old) old.remove();
+  const d = document.createElement("div");
+  d.id = "handoverNote";
+  d.className = "note" + (warn ? " warn" : "");
+  d.innerHTML = text;
+  document.querySelector(".topbar").insertAdjacentElement("afterend", d);
+}
+
+function preloadFromHash(){
+  const raw = (location.hash || "").replace(/^#/, "");
+  if (!raw.startsWith("w=")) return false;
+  let data;
+  try{
+    data = JSON.parse(b64urlToText(raw.slice(2)));
+  }catch(e){
+    console.error(e);
+    showHandoverBanner("<strong>That link was malformed.</strong> Nothing was loaded from it.", true);
+    return false;
+  }
+  setSide("attacker", data.attackers || []);
+  setSide("defender", data.defenders || []);
+  document.getElementById("defBonus").value = data.bonus === false ? "No" : "Yes";
+  showHandoverBanner(
+    "<strong>Handed over" + (data.title ? ": " + esc(data.title) : "") + ".</strong> " +
+    "Change anything you like and hit Resolve again — this is your copy now.",
+    false,
+  );
+  return true;
+}
+
+/* ---- autosave ---- */
+let autosaveArmed = false;
+let saveTimer = null;
+function scheduleSave(){
+  if (!autosaveArmed) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    store.set(LS_KEY, {
+      attacker: packSide("attacker"),
+      defender: packSide("defender"),
+      bonus: document.getElementById("defBonus").value,
+      at: Date.now()
+    });
+  }, 400);
+}
+
+function restoreAutosave(){
+  const s = store.get(LS_KEY, null);
+  if (!s) return false;
+  setSide("attacker", s.attacker);
+  setSide("defender", s.defender);
+  if (s.bonus) document.getElementById("defBonus").value = s.bonus;
+  return true;
+}
+
+/* ---- army presets (shared pool, loadable into either side) ---- */
+const getArmies  = () => store.get(LS_ARMY, {});
+const getBattles = () => store.get(LS_BATL, {});
+
+function refreshPresetSelects(){
+  const armies = Object.keys(getArmies()).sort();
+  document.querySelectorAll("[data-ap-sel]").forEach(sel=>{
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">preset…</option>` +
+      armies.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+    if (armies.includes(keep)) sel.value = keep;
+  });
+  const battles = Object.keys(getBattles()).sort();
+  const bp = document.getElementById("bpSel");
+  const keepB = bp.value;
+  bp.innerHTML = `<option value="">—</option>` +
+    battles.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  if (battles.includes(keepB)) bp.value = keepB;
+  const tc = document.getElementById("toolsCount");
+  if (tc) tc.textContent = `${armies.length} army · ${battles.length} battle` +
+    (storageOK ? "" : " · storage unavailable");
+}
+
+function saveArmyPreset(side){
+  const units = packSide(side);
+  if (!units.length){ alert("Nothing to save — that side is empty."); return; }
+  const name = (prompt("Name this army preset:", "") || "").trim();
+  if (!name) return;
+  const all = getArmies();
+  if (all[name] && !confirm(`Overwrite "${name}"?`)) return;
+  all[name] = units;
+  if (!store.set(LS_ARMY, all)) alert("Could not save — this browser is blocking local storage.");
+  refreshPresetSelects();
+  document.querySelectorAll("[data-ap-sel]").forEach(sel=>{ sel.value = name; });
+}
+
+function loadArmyPreset(side){
+  const sel = document.querySelector(`[data-ap-sel="${side}"]`);
+  const name = sel.value;
+  if (!name){ alert("Pick a preset first."); return; }
+  const units = getArmies()[name];
+  if (!units) return;
+  setSide(side, units);
+}
+
+function deleteArmyPreset(){
+  const sel = document.querySelector("[data-ap-sel]");
+  const name = sel.value;
+  if (!name){ alert("Pick a preset first."); return; }
+  if (!confirm(`Delete army preset "${name}"?`)) return;
+  const all = getArmies();
+  delete all[name];
+  store.set(LS_ARMY, all);
+  refreshPresetSelects();
+}
+
+/* ---- battle presets (both sides + bonus) ---- */
+function saveBattlePreset(){
+  const name = (prompt("Name this battle:", "") || "").trim();
+  if (!name) return;
+  const all = getBattles();
+  if (all[name] && !confirm(`Overwrite "${name}"?`)) return;
+  all[name] = {attacker: packSide("attacker"), defender: packSide("defender"),
+               bonus: document.getElementById("defBonus").value};
+  if (!store.set(LS_BATL, all)) alert("Could not save — this browser is blocking local storage.");
+  refreshPresetSelects();
+  document.getElementById("bpSel").value = name;
+}
+
+function loadBattlePreset(){
+  const name = document.getElementById("bpSel").value;
+  if (!name){ alert("Pick a battle first."); return; }
+  const b = getBattles()[name];
+  if (!b) return;
+  setSide("attacker", b.attacker);
+  setSide("defender", b.defender);
+  if (b.bonus) document.getElementById("defBonus").value = b.bonus;
+  scheduleSave();
+}
+
+function deleteBattlePreset(){
+  const name = document.getElementById("bpSel").value;
+  if (!name){ alert("Pick a battle first."); return; }
+  if (!confirm(`Delete battle preset "${name}"?`)) return;
+  const all = getBattles();
+  delete all[name];
+  store.set(LS_BATL, all);
+  refreshPresetSelects();
+}
+
+/* ---- json in / out ---- */
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+const stamp = () => new Date().toISOString().slice(0,10);
+
+function importJSON(text){
+  let data;
+  try{ data = JSON.parse(text); }
+  catch(e){ alert("That file isn't valid JSON."); return; }
+
+  const armies  = data.armyPresets   || (data.kind === "armyPresets"   ? data.presets : null);
+  const battles = data.battlePresets || (data.kind === "battlePresets" ? data.presets : null);
+  if (!armies && !battles){ alert("No presets found in that file."); return; }
+
+  let added = 0;
+  if (armies){
+    const all = getArmies();
+    Object.entries(armies).forEach(([n,v])=>{
+      let name = n;
+      while (all[name] && JSON.stringify(all[name]) !== JSON.stringify(v)) name += " (imported)";
+      all[name] = v; added++;
+    });
+    store.set(LS_ARMY, all);
+  }
+  if (battles){
+    const all = getBattles();
+    Object.entries(battles).forEach(([n,v])=>{
+      let name = n;
+      while (all[name] && JSON.stringify(all[name]) !== JSON.stringify(v)) name += " (imported)";
+      all[name] = v; added++;
+    });
+    store.set(LS_BATL, all);
+  }
+  refreshPresetSelects();
+  alert(`Imported ${added} preset(s).`);
+}
+
+/* ===================================================================
+   7. WIRING
+   =================================================================== */
+
+document.querySelectorAll("[data-add]").forEach(b=>
+  b.addEventListener("click", ()=>makeRow(b.dataset.add)));
+
+document.querySelectorAll("[data-clear]").forEach(b=>
+  b.addEventListener("click", ()=>{
+    document.getElementById(b.dataset.clear === "attacker" ? "tbodyAttacker" : "tbodyDefender").innerHTML = "";
+    refreshCounts();
+  }));
+
+document.getElementById("btnImportAtk").addEventListener("click", ()=>importRows("attacker"));
+document.getElementById("btnImportDef").addEventListener("click", ()=>importRows("defender"));
+
+/* --- army presets --- */
+document.querySelectorAll("[data-ap-save]").forEach(b=>
+  b.addEventListener("click", ()=>saveArmyPreset(b.dataset.apSave)));
+document.querySelectorAll("[data-ap-load]").forEach(b=>
+  b.addEventListener("click", ()=>loadArmyPreset(b.dataset.apLoad)));
+document.querySelectorAll("[data-ap-del]").forEach(b=>
+  b.addEventListener("click", ()=>deleteArmyPreset()));
+/* the two selects share one pool, so keep them in step */
+document.querySelectorAll("[data-ap-sel]").forEach(sel=>
+  sel.addEventListener("change", ()=>{
+    document.querySelectorAll("[data-ap-sel]").forEach(o=>{ o.value = sel.value; });
+  }));
+
+/* --- battle presets --- */
+document.getElementById("bpSave").addEventListener("click", saveBattlePreset);
+document.getElementById("bpLoad").addEventListener("click", loadBattlePreset);
+document.getElementById("bpDel").addEventListener("click", deleteBattlePreset);
+
+/* --- tools drawer --- */
+const toolsBtn = document.getElementById("btnTools");
+const toolsPanel = document.getElementById("toolsPanel");
+toolsBtn.addEventListener("click", ()=>{
+  const open = toolsPanel.style.display === "none";
+  toolsPanel.style.display = open ? "" : "none";
+  toolsBtn.classList.toggle("open", open);
+  toolsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) refreshPresetSelects();
+});
+
+document.getElementById("expArmies").addEventListener("click", ()=>
+  downloadJSON({kind:"armyPresets", armyPresets:getArmies()}, `warcalc-armies-${stamp()}.json`));
+document.getElementById("expBattles").addEventListener("click", ()=>
+  downloadJSON({kind:"battlePresets", battlePresets:getBattles()}, `warcalc-battles-${stamp()}.json`));
+document.getElementById("expAll").addEventListener("click", ()=>
+  downloadJSON({kind:"warcalcPresets", armyPresets:getArmies(), battlePresets:getBattles()},
+               `warcalc-presets-${stamp()}.json`));
+
+document.getElementById("impBtn").addEventListener("click", ()=>
+  document.getElementById("impFile").click());
+document.getElementById("impFile").addEventListener("change", e=>{
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => importJSON(String(r.result));
+  r.readAsText(f);
+  e.target.value = "";
+});
+
+document.getElementById("wipeSaves").addEventListener("click", ()=>{
+  if (!confirm("Delete the autosave and every saved preset in this browser?")) return;
+  [LS_KEY, LS_ARMY, LS_BATL].forEach(store.del);
+  refreshPresetSelects();
+  alert("Cleared.");
+});
+
+document.getElementById("btnClearResults").addEventListener("click", ()=>{
+  document.getElementById("results").innerHTML = "";
+  clearTips("death");
+});
+
+document.getElementById("defBonus").addEventListener("change", scheduleSave);
+
+document.getElementById("btnRun").addEventListener("click", ()=>{
+  const atk = readSide("attacker");
+  const def = readSide("defender");
+  if (!atk.length && !def.length){ alert("Add at least one unit to either side."); return; }
+  const bad = [...atk, ...def].find(u=>u.size < 1);
+  if (bad){ alert("Every unit needs a size of at least 1."); return; }
+  try{
+    render(simulate(atk, def, document.getElementById("defBonus").value), atk, def,
+           document.getElementById("defBonus").value);
+  } catch(e){
+    document.getElementById("results").innerHTML =
+      `<div class="panel"><div class="note warn"><strong>Resolution stopped.</strong> ${esc(e.message)}</div></div>`;
+  }
+});
+
+/* hover cards for unit names and sprites */
+const tipEl = document.getElementById("tip");
+
+document.addEventListener("mouseover", e=>{
+  const t = e.target.closest?.("[data-tip-t],[data-tip-key]");
+  if (!t) return;
+  const d = t.dataset;
+  if (d.tipKey){
+    const html = TIPS.get(d.tipKey);
+    if (!html) return;
+    tipEl.innerHTML = html;
+  } else {
+    tipEl.innerHTML = tipHTML(d.tipT, d.tipW, d.tipA,
+      d.tipSize !== undefined ? d.tipSize : null, d.tipTrain);
+  }
+  tipEl.style.display = "block";
+  moveTip(e);
+});
+
+document.addEventListener("mouseout", e=>{
+  if (e.target.closest?.("[data-tip-t],[data-tip-key]")) tipEl.style.display = "none";
+});
+
+document.addEventListener("mousemove", e=>{
+  if (tipEl.style.display === "block") moveTip(e);
+});
+
+function moveTip(e){
+  const r = tipEl.getBoundingClientRect();
+  let x = e.clientX + 16, y = e.clientY + 16;
+  if (x + r.width  > innerWidth  - 8) x = e.clientX - r.width  - 16;
+  if (y + r.height > innerHeight - 8) y = Math.max(8, e.clientY - r.height - 16);
+  tipEl.style.left = x + "px";
+  tipEl.style.top  = y + "px";
+}
+
+/* boot */
+(function checkStorage(){
+  store.set("warcalc.probe", 1); store.del("warcalc.probe");
+  if (storageOK) return;
+  const d = document.createElement("div");
+  d.className = "note warn";
+  d.innerHTML = "<strong>Autosave is off.</strong> This browser is blocking local storage for this page, " +
+                "so presets and your current battle won't survive a reload.";
+  document.querySelector(".topbar").insertAdjacentElement("afterend", d);
+})();
+
+// A handed-over battle wins over the autosave: it is what the person clicking the
+// link came to look at. It then becomes the autosave itself, so a plain reload of
+// this file still shows it.
+const handedOver = preloadFromHash();
+if (!handedOver) restoreAutosave();
+refreshPresetSelects();
+refreshCounts();
+autosaveArmed = true;
+if (handedOver) document.getElementById("btnRun").click();
+
+// Opening the file again while this tab is already open changes the fragment
+// without reloading the page, which would otherwise look like nothing happened.
+addEventListener("hashchange", ()=>{
+  if (preloadFromHash()){
+    scheduleSave();
+    document.getElementById("btnRun").click();
+  }
+});
+</script>
+</body>
+</html>

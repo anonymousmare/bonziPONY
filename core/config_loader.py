@@ -222,6 +222,11 @@ class ClopConfig:
     #: is identical either way. Set this false to keep the sync in your own clop_monitor.py
     #: run instead -- two processes writing one tab is the only way this can go wrong.
     sheet_sync: bool = True
+    #: When she runs a [WARCALC:...] during a conversation, also open tools/warcalc.html with
+    #: that battle already filled in, so the user can change the numbers themselves instead of
+    #: asking her for every variation. Only ever from a conversation -- the agent loop never
+    #: opens a window on its own.
+    warcalc_page: bool = True
     #: Find the current /mlp/ general from the board catalog instead of being told where
     #: it is. Threads archive in a day or two, so a URL in a settings file is stale more
     #: often than not -- and a stale one reads to the user as "she cannot check the thread".
@@ -474,6 +479,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             dossier_max_age_hours=float(clop_raw.get("dossier_max_age_hours", 6.0)),
             roster_max_age_hours=float(clop_raw.get("roster_max_age_hours", 12.0)),
             sheet_sync=bool(clop_raw.get("sheet_sync", True)),
+            warcalc_page=bool(clop_raw.get("warcalc_page", True)),
             thread_auto_find=bool(clop_raw.get("thread_auto_find", True)),
             thread_board=str(clop_raw.get("thread_board", "mlp") or "mlp"),
             thread_url=str(clop_raw.get("thread_url", "") or ""),
