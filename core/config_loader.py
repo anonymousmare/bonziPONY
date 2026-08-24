@@ -206,6 +206,12 @@ class ClopConfig:
     #: pages are public and unchanged by being read, so this is only about how soon somebody
     #: brand new shows up in her phone book.
     roster_max_age_hours: float = 12.0
+    #: Update the shared CLOP planning sheet each poll, the way the standalone monitor does.
+    #: The rule is the monitor's: on whenever CLOP_NATION names a tab in that sheet, off when
+    #: it does not. The writing is the monitor's own sync_sheet_step, so what lands in the tab
+    #: is identical either way. Set this false to keep the sync in your own clop_monitor.py
+    #: run instead -- two processes writing one tab is the only way this can go wrong.
+    sheet_sync: bool = True
     #: Find the current /mlp/ general from the board catalog instead of being told where
     #: it is. Threads archive in a day or two, so a URL in a settings file is stale more
     #: often than not -- and a stale one reads to the user as "she cannot check the thread".
@@ -455,6 +461,7 @@ def load_config(path: Path | str = "config.yaml") -> AppConfig:
             read_alliance_messages=bool(clop_raw.get("read_alliance_messages", True)),
             dossier_max_age_hours=float(clop_raw.get("dossier_max_age_hours", 6.0)),
             roster_max_age_hours=float(clop_raw.get("roster_max_age_hours", 12.0)),
+            sheet_sync=bool(clop_raw.get("sheet_sync", True)),
             thread_auto_find=bool(clop_raw.get("thread_auto_find", True)),
             thread_board=str(clop_raw.get("thread_board", "mlp") or "mlp"),
             thread_url=str(clop_raw.get("thread_url", "") or ""),

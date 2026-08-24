@@ -185,6 +185,11 @@ class ClopBridge:
         self.root: Optional[Path] = None
         self.last_error: Optional[str] = None
 
+        #: The shared planning sheet and the tab to write, or None when the sync is off.
+        #: Set up in _run, the same place and the same way the monitor's main() does it.
+        self._sheet = None
+        self._sheet_nation: Optional[str] = None
+
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._previous = None
@@ -298,6 +303,9 @@ class ClopBridge:
         interval = max(MIN_INTERVAL_S, int(self.config.poll_interval_s))
         state_path = self._path(self.config.state_file, ".state", "clop-monitor.json")
 
+        # After the login and before the first poll, which is where main() sets it up too.
+        self._start_sheet_sync(sink)
+
         if self.settings.cache.persist_to_file:
             try:
                 self._previous = monitor.load_snapshot(state_path)
@@ -327,11 +335,80 @@ class ClopBridge:
                 logger.exception("Unexpected error in the CLOP poll loop")
             self._stop.wait(interval)
 
+    def _start_sheet_sync(self, sink) -> None:
+        """Turn the planning-sheet sync on, by the monitor's own rule and its own check.
+
+        Nothing here decides what gets written. ``sync_sheet_step`` is the monitor's function
+        and it is handed the same arguments from the same place in the poll, so a tab updated
+        by this process is indistinguishable from one updated by ``clop_monitor.py`` running
+        on its own. All this does is the setup ``main()`` does first: resolve ``CLOP_NATION``,
+        confirm the tab exists, and stay off rather than fail every poll if it does not.
+
+        One thing is deliberately quieter than ``main()``. The monitor raises a blocking
+        dialog when ``CLOP_NATION`` is unset, because a monitor whose only job includes the
+        sheet looks perfectly healthy while never writing to it. Most people running a desktop
+        pony have never heard of the sheet, so an unset nation is logged and left alone here.
+        A nation that *is* set and does not work still gets the alert -- that is the case where
+        somebody is expecting a tab to update.
+        """
+        if not getattr(self.config, "sheet_sync", True):
+            logger.info("Planning-sheet sync is off (clop.sheet_sync is false)")
+            return
+        try:
+            from sheets import GoogleSheet, SheetError, nation_from_env
+        except Exception as exc:  # pragma: no cover - depends on the checkout
+            logger.warning("Planning-sheet sync unavailable: %s", exc)
+            return
+
+        # The same file main() reads it from, resolved the same way: the process environment
+        # wins, then the monitor's .env. That is also how CLOP_USERNAME and CLOP_PASSWORD are
+        # found above, so the login and the nation always come from the same place.
+        env_path = self._path(self.config.env_file, ".env")
+        try:
+            nation = nation_from_env(env_path)
+        except SheetError as exc:
+            logger.info("Planning-sheet sync is off: %s", exc)
+            return
+
+        sheet = GoogleSheet()
+        try:
+            sheet.require_tab(nation)
+        except SheetError as exc:
+            sink.notify_failure(f"Sheet sync is off: {exc}")
+            return
+        except Exception as exc:
+            # Unreachable sheet at startup. The monitor only guards SheetError here, but it is
+            # a program somebody is watching start; this runs unattended behind a pony.
+            sink.notify_failure(f"Sheet sync is off: could not reach the shared sheet ({exc})")
+            return
+
+        self._sheet, self._sheet_nation = sheet, nation
+        logger.info(
+            "Sheet sync on: reconciling buildings and snapshotting stockpiles for %r each "
+            "poll before alerting. Do not also run clop_monitor.py against this tab.",
+            nation,
+        )
+
     def _poll_once(self, monitor, sink, state_path: Path) -> None:
         with self.lock:
+            overview_html = None
             stockpiles = None
             if monitor.goods_to_watch(self.settings.alerts):
-                _html, stockpiles = monitor.read_overview_stockpiles(self.client)
+                overview_html, stockpiles = monitor.read_overview_stockpiles(self.client)
+
+            # Where main() puts it: after the one shared overview read, before any alerting.
+            # Both consumers share that fetch and that parse; with no watched market both are
+            # None and sync_sheet_step reads the page itself, exactly as it does for main().
+            if self._sheet is not None and self._sheet_nation is not None:
+                monitor.sync_sheet_step(
+                    self.client,
+                    self._sheet,
+                    self._sheet_nation,
+                    sink,
+                    overview_html,
+                    stockpiles,
+                )
+
             current, _paused = monitor.check_and_notify(
                 self.client,
                 self._previous,

@@ -541,6 +541,20 @@ marked read. She reads all four every twelve hours (`clop.roster_max_age_hours`)
 exactly first, then by prefix, then by substring, then against player handles, so an exact name
 is never buried under the nations that merely contain it.
 
+**The shared planning sheet.** The monitor can reconcile your building counts and snapshot your
+stockpiles into the alliance's shared Google Sheet each poll. That now runs inside the pet as
+well, and it is the monitor's own `sync_sheet_step` doing it, called with the same arguments
+from the same point in the poll — the sheet cannot tell which process wrote it. Set
+`CLOP_NATION` to the exact name of your tab in `clop_monitor/.env`, beside the login:
+
+```
+CLOP_NATION=LePone(Z)
+```
+
+Verify it with `python clop_monitor/sheets.py`, which resolves the name, checks the tab exists
+and reads one cell without writing anything. Run one writer, not two: if you would rather keep
+the sync in your own `clop_monitor.py` run, set `clop.sheet_sync: false`.
+
 **One caveat, by design.** Reading the alliance chat marks it read *for your account* — you
 will see it as read in your own browser too. That is the game's behaviour on the GET, not
 something this adds. It is the one lookup that can be switched off:

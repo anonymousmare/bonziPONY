@@ -146,6 +146,12 @@ clop:
                                # from the four regional rankings.php pages, which are public
                                # and cost nothing to read, and it is what lets you ask about
                                # a nation by name instead of by number.
+  sheet_sync: true             # update the shared planning sheet each poll, exactly as the
+                               # standalone monitor does — same function, same place in the
+                               # poll, same cells. It is on only when CLOP_NATION names your
+                               # tab (put it in clop_monitor/.env beside the login). Set this
+                               # false if you would rather run clop_monitor.py yourself: two
+                               # processes writing one tab is the only real hazard here.
   thread_check_hours: 1.0      # how often she reads the 4chan thread (0 to disable)
   thread_auto_find: true       # find the current /mlp/ general from the board catalog.
                                # Threads archive after a day or two, so leave this on and

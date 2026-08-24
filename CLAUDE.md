@@ -72,7 +72,7 @@ main.py (bootstrap + wiring)
 | `tts_queue.py` | Priority-ordered audio serialization | `TTSQueue` |
 | `pony_manager.py` | One-element holder for the active character | `PonyManager` |
 | `pony_instance.py` | Per-character state bundle (GUI + LLM + sprites + config) | `PonyInstance` |
-| `clop_bridge.py` | Runs the CLOP monitor's poll loop in-process; alerts go to the box | `ClopBridge`, `PetSink` |
+| `clop_bridge.py` | Runs the CLOP monitor's poll loop in-process; alerts go to the box, the planning sheet is synced | `ClopBridge`, `PetSink` |
 | `clop_unread.py` | Unread notifications, deduplicated and persisted, for the catch-up | `UnreadStore` |
 | `notify_filter.py` | Which alert kinds and which goods she is allowed to mention | `NotifyFilter` |
 | `clop_tools.py` | The lookups she can ask for instead of guessing | `LOOKUPS`, `ToolRegistry` |
@@ -191,6 +191,8 @@ ClopBridge poll thread (60s)
         → notification_received signal (QueuedConnection)
           → NotificationBox.push(payload)  # main thread
             → stacking.place(...)          # above her, or above her bubble, or beside her
+  → sync_sheet_step(client, sheet, nation, PetSink, overview_html, stockpiles)
+    → the monitor's own function, before the alerting, off the same overview read
   → _notice_market_nations(current)
     → dossier.notice(order.nation_id, ...)   # from the snapshot, not the alert text
 ```
@@ -417,10 +419,12 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     surrounding lines, not just the line being written, and pins that set-then-clear
     restores the file byte for byte.
 
-29. **Only `CLOP_USERNAME` and `CLOP_PASSWORD` matter to the pet.** `CLOP_NATION` is read
-    solely by `clop_monitor/sheets.py` (the planning-sheet sync) and `CLOP_WEBHOOK_URL`
-    solely by the monitor's own `main()`. Neither runs in-process, so the monitor's
-    `.env.example` overstates what is required when it is running as her.
+29. **`CLOP_USERNAME`, `CLOP_PASSWORD` and `CLOP_NATION` matter to the pet; `CLOP_WEBHOOK_URL`
+    does not.** The first two are the login. `CLOP_NATION` names the tab in the shared planning
+    sheet and turns the sync on, exactly as it does for the standalone monitor — all three are
+    read from the process environment first, then `<monitor_path>/.env`. `CLOP_WEBHOOK_URL` is
+    read only inside the monitor's own `main()`, which is bypassed, so setting it does nothing
+    here.
 
 30. **The thread URL is found, not configured.** A 4chan thread archives in a day or two,
     so `fourchan.thread_url` in the monitor's `settings.json` is stale more often than
@@ -484,14 +488,26 @@ All GUI updates go through `PetController` Qt signals with `QueuedConnection`. T
     the roster be a complete census that costs four public page fetches a day, and stops a
     roster sweep from evicting real readings.
 
-39. **The notification box holds still while the pointer is over it.** It re-places itself
+39. **The sheet sync is the monitor's function, called from the monitor's position in the
+    poll.** `ClopBridge._poll_once` hands `sync_sheet_step` the same six arguments `main()`
+    does, after the one shared `read_overview_stockpiles` and before `check_and_notify`, so a
+    tab written from here is indistinguishable from one written by `clop_monitor.py`. Do not
+    reimplement any part of what it writes. The one deliberate difference is upstream of the
+    writing: an unset `CLOP_NATION` is logged rather than raised as an alert, because most
+    people running a desktop pony have never heard of the sheet. A nation that *is* set and
+    does not resolve still alerts.
+
+40. **Two processes must not write one tab.** Nothing detects it — `clop.sheet_sync: false` is
+    the switch for running `clop_monitor.py` yourself instead.
+
+41. **The notification box holds still while the pointer is over it.** It re-places itself
     30 times a second, so without that guard a speech bubble appearing while you are reaching
     for "Mark as read" would slide the button out from under the click.
 
 ## Testing
 
 ```bash
-python -m unittest discover -s tests    # 172 tests: lorebook, lookups, dossier, roster, settings, thread, tags, filters, placement
+python -m unittest discover -s tests    # 180 tests: lorebook, lookups, dossier, roster, sheet sync, settings, thread, tags, filters, placement
 cd clop_monitor && python -m unittest   # 623 tests: the monitor's own suite
 python -m py_compile <file.py>          # everything else
 ```
