@@ -22,6 +22,7 @@ Everything here is Python standard library only, matching the rest of this proje
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -259,6 +260,20 @@ class GoogleSheet:
                 raise SheetError(message + suffix) from exc
             except urllib.error.URLError as exc:
                 message = f"could not reach sheet endpoint: {exc.reason}"
+                if attempt < len(self.retry_delays):
+                    time.sleep(self.retry_delays[attempt])
+                    continue
+                suffix = f" after {attempts} attempts" if attempt else ""
+                raise SheetError(message + suffix) from exc
+            except (TimeoutError, http.client.HTTPException) as exc:
+                # A *read* timeout is not a URLError. urlopen wraps a failure to connect, but
+                # once the connection is up the timeout is raised bare out of getresponse(),
+                # and since Python 3.10 socket.timeout is just TimeoutError. Uncaught, it
+                # skipped the retry that exists precisely for this, and escaped past every
+                # caller guarding SheetError -- tab_exists, sync_sheet_step, this module's own
+                # __main__ -- as a traceback. Apps Script is slow often enough that this is the
+                # single most likely transport failure here.
+                message = f"sheet endpoint did not answer in {self.timeout:.0f}s ({exc!r})"
                 if attempt < len(self.retry_delays):
                     time.sleep(self.retry_delays[attempt])
                     continue

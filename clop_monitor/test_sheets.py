@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline unit tests for sheets.py -- no network; urlopen is stubbed."""
 
+import http.client
 import io
 import json
 import os
@@ -207,6 +208,61 @@ class ErrorHandlingTests(unittest.TestCase):
                     GoogleSheet(retry_delays=(1.0, 3.0)).read("T", "A1")
         self.assertEqual(len(calls), 3)
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [1.0, 3.0])
+
+    def test_a_read_timeout_is_retried_then_succeeds(self):
+        """The failure this endpoint actually produces.
+
+        A connect failure arrives wrapped as URLError; a *read* timeout does not -- it comes
+        bare out of getresponse(), and since Python 3.10 socket.timeout is TimeoutError, which
+        is not a URLError. Before this was caught it skipped the retry meant for exactly this
+        and escaped as a traceback past every caller guarding SheetError.
+        """
+        outcomes = [TimeoutError("The read operation timed out"), ok([[42]])]
+
+        def respond(_req):
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        with mock.patch.object(sheets.time, "sleep") as sleep:
+            with stub_urlopen(respond) as calls:
+                result = GoogleSheet(retry_delays=(1.0, 3.0)).read("T", "A1")
+        self.assertEqual(result, [[42]])
+        self.assertEqual(len(calls), 2)
+        sleep.assert_called_once_with(1.0)
+
+    def test_a_persistent_timeout_becomes_a_sheet_error(self):
+        def boom(_req):
+            raise TimeoutError("The read operation timed out")
+
+        with mock.patch.object(sheets.time, "sleep"):
+            with stub_urlopen(boom):
+                with self.assertRaises(SheetError) as ctx:
+                    GoogleSheet(retry_delays=(1.0, 3.0)).read("T", "A1")
+        self.assertIn("did not answer", str(ctx.exception))
+        self.assertIn("after 3 attempts", str(ctx.exception))
+
+    def test_a_response_that_dies_mid_body_is_a_sheet_error_too(self):
+        # http.client raises IncompleteRead/BadStatusLine, which are HTTPException and
+        # neither HTTPError nor URLError. Same escape route as the timeout.
+        def boom(_req):
+            raise http.client.BadStatusLine("")
+
+        with stub_urlopen(boom):
+            with self.assertRaises(SheetError):
+                GoogleSheet(retry_delays=()).read("T", "A1")
+
+    def test_a_timeout_does_not_read_as_a_missing_tab(self):
+        # tab_exists maps only "no such tab" to False. A timeout reading as a missing tab
+        # would tell somebody their CLOP_NATION was wrong when it is perfectly right.
+        def boom(_req):
+            raise TimeoutError("The read operation timed out")
+
+        with mock.patch.object(sheets.time, "sleep"):
+            with stub_urlopen(boom):
+                with self.assertRaises(SheetError):
+                    GoogleSheet(retry_delays=()).tab_exists("LePone(Z)")
 
     def test_protocol_error_is_not_retried(self):
         with mock.patch.object(sheets.time, "sleep") as sleep:
