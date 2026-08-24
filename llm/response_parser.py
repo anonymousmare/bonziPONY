@@ -137,6 +137,12 @@ _MD_IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\([^)]+\)")
 # Markdown list markers: - item, * item, 1. item (at start of line)
 _MD_LIST_PATTERN = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+", re.MULTILINE)
 # HTML tags: <div>, </span>, <br/>, etc.
+#: Any bracketed ALL-CAPS command she made up -- [BROWSE:...], [SEARCH:...], [TOOL:...].
+#: The pattern above is an allowlist of real tags, so an invented one used to survive it
+#: and get read out loud. Restricted to upper case and a short name so ordinary bracketed
+#: prose is left alone, and matched after every real tag has already been removed.
+_UNKNOWN_TAG_PATTERN = re.compile(r"\[([A-Z][A-Z0-9_]{1,19})(?::([^\]]*))?\]")
+
 _HTML_TAG_PATTERN = re.compile(r"</?[a-zA-Z][^>]*>")
 # Raw URLs: http://... or https://...
 _URL_PATTERN = re.compile(r"https?://\S+")
@@ -199,6 +205,10 @@ class ParsedResponse:
     lookups: List[str] = field(default_factory=list)
     #: [WARCALC:...] bodies. Separate from lookups because the arguments are structured.
     warcalcs: List[str] = field(default_factory=list)
+    #: Commands she invented that do not exist, e.g. "BROWSE". Stripped from the speech
+    #: either way; kept so the pipeline can tell the difference between "she answered"
+    #: and "she tried to use a tool that is not real and is now waiting on nothing".
+    unknown_tags: List[str] = field(default_factory=list)
 
 
 def parse_response(raw: str) -> ParsedResponse:
@@ -470,6 +480,13 @@ def parse_response(raw: str) -> ParsedResponse:
     clean_text = _LOOKUP_PATTERN.sub("", clean_text)
     clean_text = _WARCALC_PATTERN.sub("", clean_text)
     clean_text = _LEFTOVER_TAG_PATTERN.sub("", clean_text).strip()
+
+    # Whatever is still in brackets and shouting is a command she invented. Never speak it.
+    unknown_tags = [m.group(1).upper() for m in _UNKNOWN_TAG_PATTERN.finditer(clean_text)]
+    if unknown_tags:
+        logger.info("Ignoring invented tag(s): %s", ", ".join(sorted(set(unknown_tags))))
+        clean_text = _UNKNOWN_TAG_PATTERN.sub("", clean_text).strip()
+
     # Sanitize for TTS — strip code, markdown, HTML, URLs
     clean_text = sanitize_for_speech(clean_text)
     return ParsedResponse(text=clean_text, actions=actions, desktop_commands=desktop_commands,
@@ -479,7 +496,8 @@ def parse_response(raw: str) -> ParsedResponse:
                           end_conversation=end_conversation,
                           persist_seconds=persist_seconds, moveto_region=moveto_region,
                           standing_rule=standing_rule, diary_entry=diary_entry,
-                          lookups=lookups, warcalcs=warcalcs)
+                          lookups=lookups, warcalcs=warcalcs,
+                          unknown_tags=unknown_tags)
 
 
 def sanitize_for_speech(text: str) -> str:

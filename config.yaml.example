@@ -139,6 +139,14 @@ clop:
                                # On, she can tell you what was said. Off, only how many.
   dossier_max_age_hours: 6.0   # how long a reading of another nation stays trusted before
                                # she spends a page fetch re-reading it
-  thread_check_hours: 1.0      # how often she reads the 4chan thread (0 to disable).
-                               # The thread URL itself lives in the monitor's settings.json
-                               # under fourchan.thread_url
+  thread_check_hours: 1.0      # how often she reads the 4chan thread (0 to disable)
+  thread_auto_find: true       # find the current /mlp/ general from the board catalog.
+                               # Threads archive after a day or two, so leave this on and
+                               # you never have to update a URL. Off, she uses only
+                               # fourchan.thread_url in the monitor's settings.json.
+  thread_board: "mlp"
+  thread_url: ""               # pin her to one thread instead of finding it, e.g.
+                               # "https://boards.4chan.org/mlp/thread/43454282".
+                               # Leave empty unless she picks the wrong one -- a thread
+                               # archives in a day or two and then this stops working.
+                               # Settable from the right-click menu: 4CLOP -> The /mlp/ Thread.

@@ -721,6 +721,12 @@ class Pipeline:
             # reply she meant to give.
             if parsed.lookups or parsed.warcalcs:
                 parsed = self._resolve_lookups(parsed, user_text)
+            elif parsed.unknown_tags:
+                # She reached for a tool that does not exist -- "[BROWSE:4chan.org/mlp/],
+                # one sec" -- and would otherwise sit there having promised to check
+                # something and started nothing. Point her at the real lookups and let her
+                # answer properly, rather than leaving the user with the "one sec".
+                parsed = self._recover_invented_tag(parsed, user_text)
 
             if parsed.actions:
                 from robot.actions import RobotAction as _RA
@@ -1057,6 +1063,42 @@ class Pipeline:
             parsed.lookups = []
             parsed.warcalcs = []
         return parsed
+
+    def _recover_invented_tag(self, parsed: "ParsedResponse", user_text: str) -> "ParsedResponse":
+        """Re-ask once, having told her what she actually has.
+
+        Deliberately one round and no more. If she invents a tag again the second reply is
+        used as-is: two dead turns is worse than one slightly vague answer, and the tag
+        itself never reaches speech either way because the parser strips it.
+        """
+        from llm.response_parser import parse_response
+
+        registry = getattr(getattr(self, "agent_loop", None), "clop_tools", None)
+        if registry is None:
+            from core.clop_tools import ToolRegistry
+
+            registry = ToolRegistry(None)
+
+        invented = ", ".join(f"[{tag}:...]" for tag in sorted(set(parsed.unknown_tags)))
+        logger.info("Recovering from invented tag(s): %s", invented)
+
+        hist = getattr(self.llm, "_history", None)
+        if hist is not None and len(hist) >= 2:
+            hist.pop()   # the reply that used a command that does not exist
+            hist.pop()   # our user turn; chat() puts it back
+
+        raw = self.llm.chat(
+            f"[System: {invented} is not a command you have and nothing ran. You have no "
+            f"web browser. Use one of the lookups below instead, on its own, and you will "
+            f"be given the answer before you speak. If none of them fits, just answer "
+            f"normally and say what you do not have access to -- do not say you are about "
+            f"to go and check something.\n\n"
+            f"{registry.prompt_block()}]\n\n{user_text}"
+        )
+        recovered = parse_response(raw)
+        if recovered.lookups or recovered.warcalcs:
+            return self._resolve_lookups(recovered, user_text)
+        return recovered
 
     def _chat_with_lore(self, user_text: str) -> str:
         """Ask, with the game facts for anything she mentioned already in front of her.

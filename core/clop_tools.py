@@ -803,6 +803,17 @@ class ToolRegistry:
             "and stop -- you will be given the answer and get to speak straight after, so "
             "do not guess in the same breath as asking.",
             "",
+            "The looking-up is invisible to the user: they do not see the tag and there is "
+            "no pause they notice. So do NOT announce it. Never say 'one sec', 'let me "
+            "check' or 'give me a moment' -- write the tag, get the answer, and reply once "
+            "with what you found. An announcement with nothing after it is the worst "
+            "possible answer.",
+            "",
+            "These tags are the ONLY way you can reach anything outside this conversation. "
+            "You have no web browser and no search. Commands like [BROWSE:...] or "
+            "[SEARCH:...] do not exist -- writing one does nothing at all. To read the "
+            "/mlp/ thread, use [LOOKUP:thread]; she finds the current thread herself.",
+            "",
         ]
         for lookup in self.available:
             args = "".join(f":{a.rstrip('?')}" for a in lookup.args)

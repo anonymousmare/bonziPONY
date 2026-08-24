@@ -1637,6 +1637,30 @@ class ContextMenuBuilder:
             ("On", "on"),
         ], cfg.strategy_thoughts, lambda v: self._set("clop", "strategy_thoughts", v))
 
+        thread_menu = clop_menu.addMenu("The /mlp/ Thread")
+        reading = thread_menu.addAction(f"Reading: {self._clop_thread_description()}")
+        reading.setEnabled(False)
+        thread_menu.addSeparator()
+        find = thread_menu.addAction("Find the current thread now")
+        find.triggered.connect(lambda: self._find_clop_thread(parent))
+        find.setEnabled(self.clop_bridge is not None
+                        and getattr(self.clop_bridge, "available", False))
+        self._add_toggle(
+            thread_menu, "Find it automatically",
+            getattr(cfg, "thread_auto_find", True),
+            lambda c: self._set("clop", "thread_auto_find", c),
+        )
+        thread_menu.addSeparator()
+        pinned = (getattr(cfg, "thread_url", "") or "").strip()
+        if pinned:
+            label = thread_menu.addAction(f"Pinned: {pinned.rsplit('/', 1)[-1]}")
+            label.setEnabled(False)
+        thread_menu.addAction("Pin a thread URL..." if not pinned else "Change pinned URL..."
+                              ).triggered.connect(lambda: self._pin_clop_thread(parent))
+        if pinned:
+            thread_menu.addAction("Unpin (go back to finding it)").triggered.connect(
+                lambda: self._unpin_clop_thread(parent))
+
         self._radio_submenu(clop_menu, "Read the /mlp/ Thread", [
             ("Off", 0.0),
             ("Every 30 min", 0.5),
@@ -1654,6 +1678,107 @@ class ContextMenuBuilder:
             getattr(cfg, "read_alliance_messages", True),
             lambda c: self._set_clop_alliance_chat(c, parent),
         )
+
+    def _clop_thread_description(self) -> str:
+        bridge = self.clop_bridge
+        if bridge is None or not getattr(bridge, "available", False):
+            return "not connected"
+        try:
+            return bridge.thread_description()
+        except Exception:       # a broken description must not break the menu
+            return "unknown"
+
+    def _find_clop_thread(self, parent: QWidget) -> None:
+        """Go and look for the current general now, rather than waiting for a read."""
+        bridge = self.clop_bridge
+        if bridge is None:
+            return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            found = bridge._ensure_thread(force=True)
+        except Exception as exc:
+            found = False
+            logger.warning("Thread search failed: %s", exc)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if found:
+            QMessageBox.information(
+                parent, "4CLOP Thread",
+                f"Now reading {bridge.thread_description()}.")
+        else:
+            QMessageBox.warning(
+                parent, "4CLOP Thread",
+                "Could not find the thread on /mlp/ right now.\n\n"
+                "Either the board is unreachable, or no live thread looks like the game's\n"
+                "general — it may have archived before a new one went up. She will try\n"
+                "again on her next read.")
+
+    def _pin_clop_thread(self, parent: QWidget) -> None:
+        """Pin her to one thread, for when the catalog search picks the wrong one."""
+        from PyQt5.QtWidgets import QInputDialog
+
+        current = (getattr(self.config.clop, "thread_url", "") or "").strip()
+        url, ok = QInputDialog.getText(
+            parent, "Pin the /mlp/ Thread",
+            "Paste the thread URL, e.g.\n"
+            "https://boards.4chan.org/mlp/thread/43454282\n\n"
+            "Leave blank to go back to finding it automatically.\n"
+            "Threads archive after a day or two, so a pin stops working when this one does.",
+            QLineEdit.Normal, current,
+        )
+        if not ok:
+            return
+        url = url.strip()
+        if not url:
+            self._unpin_clop_thread(parent, ask=False)
+            return
+
+        # Check it before saving, so a typo is caught here rather than the next time she
+        # tries to read and quietly comes back with nothing.
+        try:
+            import sys
+            monitor_path = str(Path(getattr(self.config.clop, "monitor_path", "clop_monitor")))
+            if monitor_path not in sys.path:
+                sys.path.insert(0, monitor_path)
+            import clop_monitor as monitor
+
+            monitor.parse_fourchan_thread_url(url)
+        except Exception as exc:
+            QMessageBox.warning(
+                parent, "Pin the /mlp/ Thread",
+                f"That does not look like a 4chan thread URL:\n\n{exc}\n\n"
+                "It should look like https://boards.4chan.org/mlp/thread/12345678")
+            return
+
+        self._set("clop", "thread_url", url)
+        bridge = self.clop_bridge
+        if bridge is not None and getattr(bridge, "available", False):
+            bridge._ensure_thread(force=True)
+            QMessageBox.information(
+                parent, "4CLOP Thread",
+                f"Pinned. Now reading {bridge.thread_description()}.")
+        else:
+            QMessageBox.information(parent, "4CLOP Thread",
+                                    "Pinned. She will use it once she is connected.")
+
+    def _unpin_clop_thread(self, parent: QWidget, ask: bool = True) -> None:
+        if ask:
+            answer = QMessageBox.question(
+                parent, "Unpin the /mlp/ Thread",
+                "Go back to finding the current thread automatically?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        self._set("clop", "thread_url", "")
+        bridge = self.clop_bridge
+        if bridge is not None and getattr(bridge, "available", False):
+            bridge._thread_resolver.forget()
+            bridge._ensure_thread(force=True)
+            QMessageBox.information(
+                parent, "4CLOP Thread",
+                f"Unpinned. Now reading {bridge.thread_description()}.")
 
     def _set_clop_alliance_chat(self, checked: bool, parent: QWidget) -> None:
         if checked:

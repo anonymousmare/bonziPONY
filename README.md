@@ -53,9 +53,16 @@ simulated in-process by a port of the game's own combat loop. See
 [Looking things up](#looking-things-up).
 
 **The thread.** Every hour she checks the 4CLOP thread on /mlp/ and decides whether it is worth
-saying anything. A cheap arithmetic gate runs before any model call, so a quiet hour costs
-nothing. She reads it and never posts to it. Posts are sanitized before they reach a prompt,
-the same way window titles are.
+saying anything, and you can ask her to look any time. A cheap arithmetic gate runs before any
+model call, so a quiet hour costs nothing.
+
+She finds the thread herself from the board catalog rather than being told where it is —
+threads archive after a day or two, so a URL in a config file would be wrong most of the time.
+When the one she is reading archives, she goes and finds its replacement. The game's own link
+in the opening post is what identifies it, which is what keeps her out of the clopfic threads.
+
+She reads it and never posts to it. Posts are sanitized before they reach a prompt, the same
+way window titles are.
 
 **User profile and memory.** The pony builds a persistent profile of the user over time — name, age, location, job, interests, personality traits, whatever comes up naturally in conversation. It also tracks ongoing events (upcoming interviews, exams, deadlines, goals) and follows up on them later. After every conversation, new facts are extracted and saved. Stale events are pruned on startup. The profile is injected into every prompt so the character genuinely remembers who you are across sessions.
 
