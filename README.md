@@ -516,7 +516,7 @@ offers one that is switched off or whose game session is down.
 | `building`, `buildings`, `recipe` | Costs, per-tick production and consumption, pollution |
 | `good`, `pollution`, `rules`, `nationtypes` | Game data straight from the SQL export |
 | `stockpiles`, `status`, `market` | Your own nation, live |
-| `nations`, `nations:burrozil`, `nations:Cottonmaw` | Who exists at all: every nation with its id, owner and region |
+| `nations`, `nations:burrozil`, `nations:Central Zebrica`, `nations:Cottonmaw` | Who exists at all: every nation with its id, owner and region |
 | `nation:47`, `nation:Silverspire`, `alliance:12` | Someone else's buildings, garrison, GDP and net production |
 | `rankings:gdp`, `rankings:longevity` | The scoreboards |
 | `messages`, `alliance_messages`, `news` | Your inbox, the alliance chat, the news feed |
